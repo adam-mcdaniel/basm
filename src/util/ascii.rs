@@ -126,6 +126,23 @@ pub fn get_template_names() -> Vec<&'static str> {
     ASCII_ART_TEMPLATES.keys().cloned().collect()
 }
 
+pub fn check_valid_template(name: &str) -> bool {
+    if ASCII_ART_TEMPLATES.contains_key(name) {
+        return true;
+    }
+    // Open it from the file system
+    let path = Path::new(name);
+    if !path.exists() {
+        error!("Template file not found: {}", name);
+        error!("Try choosing from one of the following:");
+        for template in get_template_names() {
+            error!("• {}", template);
+        }
+        return false;
+    }
+    true
+}
+
 pub fn apply_template_from_name_or_file(name: &str, bf: String, comment: Option<&str>) -> std::io::Result<String> {
     let comment = comment.unwrap_or("");
     let template = match ASCII_ART_TEMPLATES.get(name) {
@@ -136,13 +153,7 @@ pub fn apply_template_from_name_or_file(name: &str, bf: String, comment: Option<
         None => {
             // Open it from the file system
             let path = Path::new(name);
-            if !path.exists() {
-                error!("Template file not found: {}", name);
-                error!("Try choosing from one of the following:");
-                for template in get_template_names() {
-                    error!("• {}", template);
-                }
-            }
+            check_valid_template(name);
             let template_file = std::fs::read_to_string(path)?;
             template_file
         }

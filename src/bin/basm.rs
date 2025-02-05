@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 use std::{fmt::{Display, Formatter, Result as FmtResult}, io::{Read, Result, Write}};
 
-use bfcomp::*;
+use bfcomp::{util::ascii::check_valid_template, *};
 use tracing::*;
 
 #[derive(Parser, Debug)]
@@ -51,6 +51,10 @@ fn main() {
             info!("• {}", template);
         }
         std::process::exit(0);
+    } else if let Some(template) = args.art.as_ref() {
+        if !check_valid_template(template) {
+            std::process::exit(1);
+        }
     }
 
     if let Err(e) = build_for_backend(&args) {
