@@ -1,0 +1,7 @@
+main:
+    [SP] = 5
+    putint [SP]
+    putchar '\n'
+    dec [SP]
+    putint [SP]
+    putchar '\n'

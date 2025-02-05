@@ -1,0 +1,19 @@
+
+main:
+    push '\n'
+    push '?'
+    push '?'
+
+    hex_dump
+    putchar '\n'
+    R0 lea [SP] - 1
+    [R0] = '!'
+    
+    pop R1
+    putchar R1
+
+    pop R1
+    putchar R1
+
+    pop R1
+    putchar R1

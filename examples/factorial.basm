@@ -1,0 +1,33 @@
+main:
+    putchar 'F'
+    putchar 'a'
+    putchar 'c'
+    putchar 't'
+    putchar ' '
+    putchar 'o'
+    putchar 'f'
+    putchar ' '
+    R0 = 5
+    putint R0
+    putchar ':'
+    putchar ' '
+    push R0
+    call fact
+    putint [SP]
+    putchar '\n'
+    quit
+
+fact:
+    R0 eq [SP], 1
+    jmp_if R0, end
+
+    push [SP]
+    dec [SP]
+    
+    call fact
+    pop R0
+    [SP] mul R0
+    ret
+end:
+    [SP] = 1
+    ret

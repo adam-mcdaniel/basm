@@ -1,0 +1,14 @@
+main:
+    cat:
+        getchar R0
+        R1 eq R0, 0
+        jmp_if R1, end
+        putchar R0
+        jmp cat
+end:
+    putchar 'B'
+    putchar 'y'
+    putchar 'e'
+    putchar '!'
+    putchar '\n'
+    quit

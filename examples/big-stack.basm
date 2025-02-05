@@ -1,0 +1,12 @@
+main:
+    R0 = 500
+    R1 lea [SP] + R0
+
+    [R1] = 6
+    
+    putint R1
+    putchar '\n'
+    putint [R1]
+    putchar '\n'
+
+    quit

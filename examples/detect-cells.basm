@@ -1,0 +1,79 @@
+main:
+    putchar 'H'
+    putchar 'i'
+    putchar '!'
+    putchar '\n'
+    call detect_cell_size
+    pop R0
+    putchar 'F'
+    putchar 'o'
+    putchar 'u'
+    putchar 'n'
+    putchar 'd'
+    putchar ' '
+
+    putint R0
+    putchar ' '
+    putchar 'b'
+    putchar 'i'
+    putchar 't'
+    putchar ' '
+    putchar 'c'
+    putchar 'e'
+    putchar 'l'
+    putchar 'l'
+    putchar 's'
+    putchar '!'
+    putchar '\n'
+    quit
+
+detect_cell_size:
+    is_8bit:
+        // Calculate 256
+        R0 = 16
+        R0 mul R0
+        // Check if it's zero
+        R1 eq R0, 0
+        jmp_if R1, print_is_8bit
+        jmp is_16bit
+
+    is_16bit:
+        // Calculate 65536
+        R0 = 256
+        R0 mul R0
+        // Check if it's zero
+        R1 eq R0, 0
+        jmp_if R1, print_is_16bit
+        jmp print_is_32bit
+
+    print_is_8bit:
+        putchar '8'
+        putchar ' '
+        putchar 'b'
+        putchar 'i'
+        putchar 't'
+        putchar '\n'
+        push 8
+        ret
+
+    print_is_16bit:
+        putchar '1'
+        putchar '6'
+        putchar ' '
+        putchar 'b'
+        putchar 'i'
+        putchar 't'
+        putchar '\n'
+        push 16
+        ret
+
+    print_is_32bit:
+        putchar '3'
+        putchar '2'
+        putchar ' '
+        putchar 'b'
+        putchar 'i'
+        putchar 't'
+        putchar '\n'
+        push 32
+        ret
