@@ -376,7 +376,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-basm = { git = "https://github.com/adam-mcdaniel/basm
+basm = { git = "https://github.com/adam-mcdaniel/basm" }
 ```
 
 Then, you can generate assembly from within your project!
