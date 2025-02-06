@@ -22,11 +22,6 @@
 <div align="center">
     <img alt="Compiled Fibonacci sequence program" src="./assets/example.png" width="67.9%"/>
     <img alt="Brainfuck interpreter" src="./assets/mem.gif" width="30.9%"/>
-  <!-- <a target="_blank" href="https://adam-mcdaniel.github.io/harbor">
-    <img alt="Compiled Fibonacci sequence program" src="./assets/fib.png" width="68%"/>
-  </a>
-  <a target="_blank" href="https://adam-mcdaniel.github.io/harbor">
-    <img alt="Dynamic Brainfuck interpreter" src="./assets/mem.gif" width="29%"/> -->
   </a>
 </div>
 
@@ -79,7 +74,11 @@ Here's an example program compiled with the `footgun` template.
 
 You also can pad the program to fit your ASCII art template with your own comments, such as `Adam is awesome!`.
 
-Any text file containing ASCII art can be used as a template!
+Here's an example of a program with the `smile` template and the comment `Adam McDaniel`!
+
+![Smile](assets/smile2.png)
+
+Any text file containing ASCII art can be used as a template! Use the path to the template file as the `-a` argument to use it.
 
 ### Optimizing BrainF*** Compiler
 ---
