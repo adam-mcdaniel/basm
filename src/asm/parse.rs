@@ -1,6 +1,13 @@
 // parser.rs
 use nom::{
-    branch::alt, bytes::complete::{tag, take_while1, take_while_m_n}, character::complete::{anychar, char, digit1, hex_digit1, multispace0, space0}, combinator::{cut, eof, map, map_res, opt, recognize}, error::{convert_error, ParseError, VerboseError}, multi::{many0, many1, separated_list0}, sequence::{delimited, pair, preceded, terminated, tuple}, IResult
+    branch::alt,
+    bytes::complete::{is_not, tag, take_while1, take_while_m_n},
+    character::complete::{anychar, char, digit1, hex_digit1, multispace0, multispace1, space0},
+    combinator::{cut, eof, map, map_opt, map_res, opt, recognize, value, verify},
+    error::{convert_error, ParseError, VerboseError},
+    multi::{fold_many0, many0, many1},
+    sequence::{delimited, pair, preceded, terminated, tuple},
+    IResult, Parser,
 };
 
 use super::*;
@@ -14,7 +21,6 @@ pub type Error<'a> = VerboseError<&'a str>;
 
 /// A convenient alias for our IResult with that error type.
 pub type Res<'a, T> = IResult<&'a str, T, Error<'a>>;
-
 
 //
 // Parsers
@@ -44,7 +50,7 @@ fn parse_identifier(input: &str) -> Res<Symbol> {
 
 /// A register is simply an identifier (e.g. "R0", "SP", "HP").
 fn parse_register(input: &str) -> Res<StaticLocation> {
-    // Parse a name in `REGISTER_NAMES` 
+    // Parse a name in `REGISTER_NAMES`
     let (input, _) = space0(input)?;
     let (input, id) = parse_identifier(input)?;
     if REGISTER_NAMES.contains(&id.as_str()) {
@@ -64,22 +70,16 @@ fn parse_register(input: &str) -> Res<StaticLocation> {
 fn parse_immediate_literal(input: &str) -> Res<u64> {
     alt((
         // Parse a hexadecimal number
-        map_res(
-            preceded(tag("0x"), ws(hex_digit1)),
-            |hex_str: &str| u64::from_str_radix(hex_str, 16),
-        ),
-
+        map_res(preceded(tag("0x"), ws(hex_digit1)), |hex_str: &str| {
+            u64::from_str_radix(hex_str, 16)
+        }),
         // Parse an octal number
         map_res(
             preceded(tag("0o"), ws(take_while1(|c: char| c.is_ascii_digit()))),
             |octal_str: &str| u64::from_str_radix(octal_str, 8),
         ),
-
         // Parse a decimal number
-        map_res(ws(digit1), |digit_str: &str| {
-            digit_str.parse::<u64>()
-        }),
-        
+        map_res(ws(digit1), |digit_str: &str| digit_str.parse::<u64>()),
         // Parse a character literal
         map(ws(parse_char_literal), |c| c as u64),
     ))(input)
@@ -101,12 +101,19 @@ fn parse_escape(input: &str) -> Res<char> {
             map(char('\\'), |_| '\\'),
             map(char('\''), |_| '\''),
             map(char('"'), |_| '\"'),
-            map_res(preceded(tag("x"), take_while_m_n(2, 2, |c: char| c.is_ascii_hexdigit())), 
-                    |hex| u8::from_str_radix(hex, 16).map(|b| b as char)),
-            map_res(preceded(tag("u{"), recognize(hex_digit1)), 
-                    |hex| u32::from_str_radix(hex, 16).ok()
-                          .and_then(std::char::from_u32)
-                          .ok_or_else(|| nom::Err::Error((hex, nom::error::ErrorKind::Char)))),
+            map_res(
+                preceded(
+                    tag("x"),
+                    take_while_m_n(2, 2, |c: char| c.is_ascii_hexdigit()),
+                ),
+                |hex| u8::from_str_radix(hex, 16).map(|b| b as char),
+            ),
+            map_res(preceded(tag("u{"), recognize(hex_digit1)), |hex| {
+                u32::from_str_radix(hex, 16)
+                    .ok()
+                    .and_then(std::char::from_u32)
+                    .ok_or_else(|| nom::Err::Error((hex, nom::error::ErrorKind::Char)))
+            }),
         )),
     )(input)
 }
@@ -134,10 +141,9 @@ fn parse_dynamic_location(input: &str) -> Res<DynamicLocation> {
         // delimited(tag("["), ws(tag("HP")), char(']')),
         //     |_| DynamicLocation::DerefStack(StaticLocation::register("HP")),
         // ),
-        map(
-            delimited(tag("["), ws(parse_register), char(']')),
-            |reg| DynamicLocation::DerefStack(reg),
-        ),
+        map(delimited(tag("["), ws(parse_register), char(']')), |reg| {
+            DynamicLocation::DerefStack(reg)
+        }),
         // map(
         //     delimited(delimited(tag("["), ws(tag("HBP")), ws(tag("+"))), ws(parse_register), char(']')),
         //     |reg| DynamicLocation::DerefStack(reg),
@@ -167,13 +173,148 @@ fn parse_dec_dump(input: &str) -> Res<BasicBlockOp> {
     Ok((input, BasicBlockOp::DecimalDump))
 }
 
+/// Parse a unicode sequence, of the form u{XXXX}, where XXXX is 1 to 6
+/// hexadecimal numerals. We will combine this later with parse_escaped_char
+/// to parse sequences like \u{00AC}.
+fn parse_unicode(input: &str) -> Res<char> {
+    // `take_while_m_n` parses between `m` and `n` bytes (inclusive) that match
+    // a predicate. `parse_hex` here parses between 1 and 6 hexadecimal numerals.
+    let parse_hex = take_while_m_n(1, 6, |c: char| c.is_ascii_hexdigit());
+
+    // `preceded` takes a prefix parser, and if it succeeds, returns the result
+    // of the body parser. In this case, it parses u{XXXX}.
+    let parse_delimited_hex = preceded(
+        char('u'),
+        // `delimited` is like `preceded`, but it parses both a prefix and a suffix.
+        // It returns the result of the middle parser. In this case, it parses
+        // {XXXX}, where XXXX is 1 to 6 hex numerals, and returns XXXX
+        delimited(char('{'), parse_hex, char('}')),
+    );
+
+    // `map_res` takes the result of a parser and applies a function that returns
+    // a Result. In this case we take the hex bytes from parse_hex and attempt to
+    // convert them to a u32.
+    let parse_u32 = map_res(parse_delimited_hex, move |hex| u32::from_str_radix(hex, 16));
+
+    // map_opt is like map_res, but it takes an Option instead of a Result. If
+    // the function returns None, map_opt returns an error. In this case, because
+    // not all u32 values are valid unicode code points, we have to fallibly
+    // convert to char with from_u32.
+    map_opt(parse_u32, std::char::from_u32).parse(input)
+}
+
+/// Parse an escaped character: \n, \t, \r, \u{00AC}, etc.
+fn parse_escaped_char(input: &str) -> Res<char> {
+    preceded(
+        char('\\'),
+        // `alt` tries each parser in sequence, returning the result of
+        // the first successful match
+        alt((
+            parse_unicode,
+            // The `value` parser returns a fixed value (the first argument) if its
+            // parser (the second argument) succeeds. In these cases, it looks for
+            // the marker characters (n, r, t, etc) and returns the matching
+            // character (\n, \r, \t, etc).
+            value('\n', char('n')),
+            value('\r', char('r')),
+            value('\t', char('t')),
+            value('\u{08}', char('b')),
+            value('\u{0C}', char('f')),
+            value('\\', char('\\')),
+            value('/', char('/')),
+            value('"', char('"')),
+        )),
+    )
+    .parse(input)
+}
+
+/// Parse a backslash, followed by any amount of whitespace. This is used later
+/// to discard any escaped whitespace.
+fn parse_escaped_whitespace(input: &str) -> Res<&str> {
+    preceded(char('\\'), multispace1).parse(input)
+}
+
+/// Parse a non-empty block of text that doesn't include \ or "
+fn parse_literal(input: &str) -> Res<&str> {
+    // `is_not` parses a string of 0 or more characters that aren't one of the
+    // given characters.
+    let not_quote_slash = is_not("\"\\");
+
+    // `verify` runs a parser, then runs a verification function on the output of
+    // the parser. The verification function accepts out output only if it
+    // returns true. In this case, we want to ensure that the output of is_not
+    // is non-empty.
+    verify(not_quote_slash, |s: &str| !s.is_empty()).parse(input)
+}
+
+/// A string fragment contains a fragment of a string being parsed: either
+/// a non-empty Literal (a series of non-escaped characters), a single
+/// parsed escaped character, or a block of escaped whitespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StringFragment<'a> {
+    Literal(&'a str),
+    EscapedChar(char),
+    EscapedWS,
+}
+
+/// Combine parse_literal, parse_escaped_whitespace, and parse_escaped_char
+/// into a StringFragment.
+fn parse_fragment(input: &str) -> Res<StringFragment> {
+    alt((
+        // The `map` combinator runs a parser, then applies a function to the output
+        // of that parser.
+        map(parse_literal, StringFragment::Literal),
+        map(parse_escaped_char, StringFragment::EscapedChar),
+        value(StringFragment::EscapedWS, parse_escaped_whitespace),
+    ))
+    .parse(input)
+}
+
+/// Parse a string. Use a loop of parse_fragment and push all of the fragments
+/// into an output string.
+fn parse_string(input: &str) -> Res<String> {
+    // fold is the equivalent of iterator::fold. It runs a parser in a loop,
+    // and for each output value, calls a folding function on each output value.
+    let build_string = fold_many0(
+        // Our parser function – parses a single string fragment
+        parse_fragment,
+        // Our init value, an empty string
+        String::new,
+        // Our folding function. For each fragment, append the fragment to the
+        // string.
+        |mut string, fragment| {
+            match fragment {
+                StringFragment::Literal(s) => string.push_str(s),
+                StringFragment::EscapedChar(c) => string.push(c),
+                StringFragment::EscapedWS => {}
+            }
+            string
+        },
+    );
+
+    // Finally, parse the string. Note that, if `build_string` could accept a raw
+    // " character, the closing delimiter " would never match. When using
+    // `delimited` with a looping parser (like fold), be sure that the
+    // loop won't accidentally match your closing delimiter!
+    delimited(char('"'), build_string, char('"')).parse(input)
+}
+
+/// Parse a `log` instruction:
+/// Takes a string literal, plus an optional number of registers to print
+fn parse_log(input: &str) -> Res<BasicBlockOp> {
+    let (input, _) = ws(tag("log"))(input)?;
+    let (input, string) = parse_string(input)?;
+    let (input, locs) = many0(preceded(ws(char(',')), parse_dynamic_location))(input)?;
+    Ok((input, BasicBlockOp::Log(string, locs)))
+}
+
 /// Parse the `set` instruction:
 ///   [<dynamic_location>] = <operand>
 fn parse_set(input: &str) -> Res<BasicBlockOp> {
     let (input, dest) = parse_dynamic_location(input)?;
     let (input, _) = ws(tag("="))(input)?;
     let (input, src) = parse_operand(input)?;
-    Ok((input, BasicBlockOp::Set {dest, src}))
+    Ok((input, BasicBlockOp::Set { dest, src }))
 }
 
 /// Parse the `ne` instruction.
@@ -182,16 +323,27 @@ fn parse_lea(input: &str) -> Res<BasicBlockOp> {
     let (input, _) = ws(tag("lea"))(input)?;
     let (input, src) = parse_dynamic_location(input)?;
     let mut negative = false;
-    let (input, offset) = opt(
-        alt((
-            preceded(pair(space0, ws(char('+'))), parse_operand),
-            preceded(pair(space0, ws(char('-'))), map(parse_operand, |op| {negative=true; op})),
-        ))
-    )(input)?;
+    let (input, offset) = opt(alt((
+        preceded(pair(space0, ws(char('+'))), parse_operand),
+        preceded(
+            pair(space0, ws(char('-'))),
+            map(parse_operand, |op| {
+                negative = true;
+                op
+            }),
+        ),
+    )))(input)?;
 
-    Ok((input, BasicBlockOp::GetAddr {dest, src, offset, negative}))
+    Ok((
+        input,
+        BasicBlockOp::GetAddr {
+            dest,
+            src,
+            offset,
+            negative,
+        },
+    ))
 }
-
 
 /// Parse the `inc` instruction:
 ///   inc <dynamic_location> [<imm>]
@@ -212,7 +364,6 @@ fn parse_dec(input: &str) -> Res<BasicBlockOp> {
 
     Ok((input, BasicBlockOp::Dec(op, imm)))
 }
-
 
 /// Parse the `push` instruction:
 ///   push <operand>
@@ -273,9 +424,9 @@ where
         let (input, lhs) = parse_operand(input)?;
         let (input, rhs) = opt(preceded(ws(char(',')), parse_operand))(input)?;
         match rhs {
-            // Pass the dst as the lhs 
+            // Pass the dst as the lhs
             None => Ok((input, constructor(Operand::Location(dest), lhs, dest))),
-            Some(rhs) => Ok((input, constructor(lhs, rhs, dest)))
+            Some(rhs) => Ok((input, constructor(lhs, rhs, dest))),
         }
     }
 }
@@ -300,10 +451,12 @@ fn parse_div(input: &str) -> Res<BasicBlockOp> {
     parse_binary_op("div", |lhs, rhs, dest| BasicBlockOp::Div { lhs, rhs, dest })(input)
 }
 
+/*
 /// Parse the `mod` instruction.
 fn parse_mod(input: &str) -> Res<BasicBlockOp> {
     parse_binary_op("mod", |lhs, rhs, dest| BasicBlockOp::Mod { lhs, rhs, dest })(input)
 }
+ */
 
 /// Parse the `eq` instruction.
 fn parse_eq(input: &str) -> Res<BasicBlockOp> {
@@ -312,7 +465,7 @@ fn parse_eq(input: &str) -> Res<BasicBlockOp> {
 
 /// Parse the `ne` instruction.
 fn parse_ne(input: &str) -> Res<BasicBlockOp> {
-    parse_binary_op("ne", |lhs, rhs, dest| BasicBlockOp::Ne { lhs, rhs, dest })(input)
+    parse_binary_op("neq", |lhs, rhs, dest| BasicBlockOp::Ne { lhs, rhs, dest })(input)
 }
 
 /// Parse the unary `neg` instruction:
@@ -390,10 +543,7 @@ fn parse_end_of_line(input: &str) -> Res<()> {
 }
 
 fn parse_end_of_lines(input: &str) -> Res<()> {
-    alt((
-        map(many1(parse_end_of_line), |_| ()),
-        map(eof, |_| ()),
-    ))(input)
+    alt((map(many1(parse_end_of_line), |_| ()), map(eof, |_| ())))(input)
 }
 
 /// Parse one “line” of assembly. This line can be a basic block op,
@@ -401,6 +551,7 @@ fn parse_end_of_lines(input: &str) -> Res<()> {
 fn parse_basic_block_op(input: &str) -> Res<BasicBlockOp> {
     let (input, op) = ws(alt((
         parse_hex_dump,
+        parse_log,
         parse_dec_dump,
         parse_inc,
         parse_dec,
@@ -415,7 +566,6 @@ fn parse_basic_block_op(input: &str) -> Res<BasicBlockOp> {
         parse_sub,
         parse_mul,
         parse_div,
-        parse_mod,
         parse_neg,
         parse_eq,
         parse_ne,
@@ -506,6 +656,7 @@ fn strip_comments(input: &str) -> String {
                 // Skip the rest of the line
                 while let Some(c) = input_chars.next() {
                     if c == '\n' {
+                        output.push(c);
                         break;
                     }
                 }
@@ -524,9 +675,13 @@ fn strip_comments(input: &str) -> String {
             }
         } else if c == ';' {
             // Skip the rest of the line
-            while let Some(c) = input_chars.next() {
-                if c == '\n' {
-                    break;
+            if let Some(';') = input_chars.peek() {
+                // Skip the rest of the line
+                while let Some(c) = input_chars.next() {
+                    if c == '\n' {
+                        output.push(c);
+                        break;
+                    }
                 }
             }
         } else {
@@ -537,20 +692,41 @@ fn strip_comments(input: &str) -> String {
 }
 
 pub fn parse(input: &str) -> Result<Program, String> {
-    match parse_program(&strip_comments(input)) {
+    match parse_program(&(strip_comments(input) + "\n")) {
         Ok((rest, program)) => {
             if rest.is_empty() {
                 Ok(program)
             } else {
-                Err(format!("Failed to parse the entire input. Remaining: {}", rest))
+                Err(format!(
+                    "Failed to parse the entire input. Remaining: {}",
+                    rest
+                ))
             }
         }
         Err(e) => {
+            println!("Error: {:#?}", e);
             match e {
                 nom::Err::Error(e) => Err(format!("Error: {}", convert_error(input, e))),
                 nom::Err::Failure(e) => Err(format!("Failure: {}", convert_error(input, e))),
                 nom::Err::Incomplete(_) => Err("Incomplete input".into()),
             }
-        },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_parse_string() {
+        let (rest, s) = parse_string("\"Hello, world!\"").unwrap();
+        println!("rest: {}", rest);
+        assert_eq!(s, "Hello, world!");
+    }
+    #[test]
+    fn test_log_string() {
+        let (rest, s) = parse_log("log \"Hello, world!\"").unwrap();
+        println!("rest: {}", rest);
+        println!("s: {:?}", s);
     }
 }

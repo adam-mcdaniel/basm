@@ -1,0 +1,12 @@
+
+;;
+;; `yes` program
+;;
+;; This program prints "y" forever.
+;;
+
+start: ;; Define a label
+    ;; Code here
+    putchar 'y'
+    putchar '\n'
+    jmp start ;; Jump to the start label

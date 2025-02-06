@@ -1,7 +1,32 @@
+//! # basm - Brainfuck Assembly
+//! 
+//! A library for compiling Brainfuck to assembly and other languages.
+//! 
+//! ```rust
+//! use basm::{Program, simplify_bf};
+//! 
+//! fn main() {
+//!     let program = Program::parse("
+//!         log \"Hello world!\"
+//!         R0 = 5
+//!         R1 = 10
+//! 
+//!         R2 add R0, R1
+//!         log \" + \"
+//!         putint R1
+//!         log \" = \"
+//!         putint R2
+//!     ").expect("Failed to parse assembly");
+//!     let bf = program.assemble();
+//!     let optimized_bf = simplify_bf(bf);
+//!     println!("{}", optimized_bf);
+//! }
+//! ```
+
 #![recursion_limit = "1024"]
-use tracing::info;
 use lazy_static::lazy_static;
 use std::sync::RwLock;
+use tracing::info;
 
 mod asm;
 pub use asm::*;
@@ -10,7 +35,9 @@ mod symbol;
 pub use symbol::*;
 
 mod bf;
-pub use bf::{compile_and_run, compile_and_run_with_input, compile_to_exe, compile_to_c, simplify_bf};
+pub use bf::{
+    compile_and_run, compile_and_run_with_input, compile_to_c, compile_to_exe, simplify_bf, compile_to_ook
+};
 
 pub mod util;
 
@@ -93,18 +120,20 @@ impl Table {
         let temp0 = self.temp0;
         let temp1 = self.temp1;
         let temp2 = self.temp2;
-        
+
         temp0.zero()
-        + &temp1.zero()
-        + &temp2.zero()
-        + &while_on(&y, temp1.inc() + &temp2.inc() + &y.dec()) + &while_on(&temp2, y.inc() + &temp2.dec())
-        + &while_on(&z, temp0.inc() + &temp2.inc() + &z.dec()) + &while_on(&temp2, z.inc() + &temp2.dec())
-        + &x.to()
-        + ">>[[>>]+[<<]>>-]+"
-        + "[>>]<[-]<[<<]"
-        + ">[>[>>]<+<[<<]>-]"
-        + ">[>>]<<[-<<]"
-        + &x.from()
+            + &temp1.zero()
+            + &temp2.zero()
+            + &while_on(&y, temp1.inc() + &temp2.inc() + &y.dec())
+            + &while_on(&temp2, y.inc() + &temp2.dec())
+            + &while_on(&z, temp0.inc() + &temp2.inc() + &z.dec())
+            + &while_on(&temp2, z.inc() + &temp2.dec())
+            + &x.to()
+            + ">>[[>>]+[<<]>>-]+"
+            + "[>>]<[-]<[<<]"
+            + ">[>[>>]<+<[<<]>-]"
+            + ">[>>]<<[-<<]"
+            + &x.from()
     }
 
     pub fn set_const(&self, index: StaticLocation, value: u64) -> String {
@@ -112,14 +141,14 @@ impl Table {
         z.set_const(value) + &self.set(index, z)
     }
 
-    pub fn get(&self, index: StaticLocation , dst: StaticLocation) -> String {
+    pub fn get(&self, index: StaticLocation, dst: StaticLocation) -> String {
         let x = dst;
         let y = self.start_data;
         let z = index;
 
         let temp0 = self.temp0;
         let temp1 = self.temp1;
-        
+
         x.zero()
         + &temp0.zero()
         + &temp1.zero()
@@ -137,33 +166,30 @@ impl Table {
     }
 }
 
-fn while_loop(contents: String) -> String {
-    format!("[{}]", contents)
-}
-
 fn while_on(x: &StaticLocation, contents: String) -> String {
-    format!("{to}[{from}{contents}{to}]{from}", to=x.to(), from=x.from())
+    format!(
+        "{to}[{from}{contents}{to}]{from}",
+        to = x.to(),
+        from = x.from()
+    )
 }
 
 fn if_stmt(x: &StaticLocation, contents: String) -> String {
     // ZERO.zero() + &x.to() + "[" + &x.from() + &contents + &ZERO.to() + "]" + &ZERO.from()
     IF_TEMP0.set_from(*x)
-    + &IF_TEMP0.to()
-    + "["
-    + &IF_TEMP0.from()
-    + &contents
-    + &IF_TEMP0.to()
-    + "[-]]"
-    + &IF_TEMP0.from()
+        + &IF_TEMP0.to()
+        + "["
+        + &IF_TEMP0.from()
+        + &contents
+        + &IF_TEMP0.to()
+        + "[-]]"
+        + &IF_TEMP0.from()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StaticLocation {
     /// A named location.
-    Named {
-        name: &'static str,
-        addr: usize
-    },
+    Named { name: &'static str, addr: usize },
     /// A fixed address on the tape.
     Address(usize),
 }
@@ -183,7 +209,10 @@ impl StaticLocation {
     pub const fn off(self, offset: i64) -> Self {
         match self {
             StaticLocation::Address(addr) => StaticLocation::Address(addr + offset as usize),
-            StaticLocation::Named { name, addr } => StaticLocation::Named { name, addr: addr + offset as usize }
+            StaticLocation::Named { name, addr } => StaticLocation::Named {
+                name,
+                addr: addr + offset as usize,
+            },
         }
     }
 
@@ -218,6 +247,10 @@ impl StaticLocation {
     }
 
     pub fn set_from(&self, src: StaticLocation) -> String {
+        if self == &src {
+            return String::new();
+        }
+
         let y = src;
         let x: StaticLocation = *self;
         let temp0 = SET_TEMP;
@@ -226,9 +259,9 @@ impl StaticLocation {
         // y[x+temp0+y-]
         // temp0[y+temp0-]
         temp0.zero()
-        + &x.zero()
-        + &while_on(&y, x.inc() + &temp0.inc() + &y.dec())
-        + &while_on(&temp0, y.inc() + &temp0.dec())
+            + &x.zero()
+            + &while_on(&y, x.inc() + &temp0.inc() + &y.dec())
+            + &while_on(&temp0, y.inc() + &temp0.dec())
     }
 
     pub fn load_into(&self, dst: StaticLocation) -> String {
@@ -241,9 +274,21 @@ impl StaticLocation {
         let x = dest;
 
         x.set_from(src)
-        + &temp0.zero()
-        + &while_on(&x, temp0.inc() + &x.dec())
-        + &while_on(&temp0, x.dec() + &temp0.inc())
+            + &temp0.zero()
+            + &while_on(&x, temp0.inc() + &x.dec())
+            + &while_on(&temp0, x.dec() + &temp0.inc())
+    }
+
+    pub fn boolean_not(dest: StaticLocation, src: StaticLocation) -> String {
+        // temp0[-]
+        // x[temp0+x[-]]+
+        // temp0[x-temp0-]
+        let x = dest;
+        let temp0 = MATH_TEMP0;
+        temp0.zero()
+        + &x.set_from(src)
+        + &while_on(&x, temp0.inc() + &x.zero()) + &x.inc()
+        + &while_on(&temp0, x.dec() + &temp0.dec())
     }
 
     pub fn equals(dest: StaticLocation, lhs: StaticLocation, rhs: StaticLocation) -> String {
@@ -259,12 +304,10 @@ impl StaticLocation {
 
         // x[-y-x]+y[x-y[-]]
         x.set_from(lhs)
-        + &y.set_from(rhs)
-        + &while_on(&x, x.dec() + &y.dec())
-        + &x.inc()
-        + &while_on(&y, x.dec() + &y.zero())
-
-
+            + &y.set_from(rhs)
+            + &while_on(&x, x.dec() + &y.dec())
+            + &x.inc()
+            + &while_on(&y, x.dec() + &y.zero())
 
         // temp0.zero()
         // + &temp1.zero()
@@ -290,12 +333,12 @@ impl StaticLocation {
         let temp1 = NOT_EQUALS_TEMP1;
 
         temp0.zero()
-        + &temp1.zero()
-        + &x.set_from(lhs)
-        + &while_on(&x, temp1.inc() + &x.dec())
-        + &while_on(&y, temp1.dec() + &temp0.inc() + &y.dec())
-        + &while_on(&temp0, y.inc() + &temp0.dec())
-        + &while_on(&temp1, x.inc() + &temp1.zero())
+            + &temp1.zero()
+            + &x.set_from(lhs)
+            + &while_on(&x, temp1.inc() + &x.dec())
+            + &while_on(&y, temp1.dec() + &temp0.inc() + &y.dec())
+            + &while_on(&temp0, y.inc() + &temp0.dec())
+            + &while_on(&temp1, x.inc() + &temp1.zero())
     }
 
     pub fn plus(dest: StaticLocation, lhs: StaticLocation, rhs: StaticLocation) -> String {
@@ -309,10 +352,10 @@ impl StaticLocation {
         let temp0 = MATH_TEMP1;
 
         temp0.zero()
-        + &x.set_from(lhs)
-        + &while_on(&y, x.inc() + &temp0.inc() + &y.dec())
-        + &while_on(&temp0, y.inc() + &temp0.dec())
-        + &dest.set_from(x)
+            + &x.set_from(lhs)
+            + &while_on(&y, x.inc() + &temp0.inc() + &y.dec())
+            + &while_on(&temp0, y.inc() + &temp0.dec())
+            + &dest.set_from(x)
     }
 
     pub fn minus(dest: StaticLocation, lhs: StaticLocation, rhs: StaticLocation) -> String {
@@ -326,10 +369,10 @@ impl StaticLocation {
         let temp0 = MATH_TEMP1;
 
         temp0.zero()
-        + &x.set_from(lhs)
-        + &while_on(&y, x.dec() + &temp0.inc() + &y.dec())
-        + &while_on(&temp0, y.inc() + &temp0.dec())
-        + &dest.set_from(x)
+            + &x.set_from(lhs)
+            + &while_on(&y, x.dec() + &temp0.inc() + &y.dec())
+            + &while_on(&temp0, y.inc() + &temp0.dec())
+            + &dest.set_from(x)
     }
 
     pub fn times(dest: StaticLocation, lhs: StaticLocation, rhs: StaticLocation) -> String {
@@ -347,13 +390,15 @@ impl StaticLocation {
         let temp1 = MATH_TEMP1;
 
         temp0.zero()
-        + &temp1.zero()
-        + &x.set_from(lhs)
-
-        + &while_on(&x, temp1.inc() + &x.dec())
-        + &while_on(&temp1, 
-            while_on(&y, x.inc() + &temp0.inc() + &y.dec())
-            + &while_on(&temp0, y.inc() + &temp0.dec()) + &temp1.dec())
+            + &temp1.zero()
+            + &x.set_from(lhs)
+            + &while_on(&x, temp1.inc() + &x.dec())
+            + &while_on(
+                &temp1,
+                while_on(&y, x.inc() + &temp0.inc() + &y.dec())
+                    + &while_on(&temp0, y.inc() + &temp0.dec())
+                    + &temp1.dec(),
+            )
     }
 
     pub fn divide(dest: StaticLocation, lhs: StaticLocation, rhs: StaticLocation) -> String {
@@ -382,26 +427,33 @@ impl StaticLocation {
         let temp2 = MATH_TEMP2;
         let temp3 = MATH_TEMP3;
 
-
         temp0.zero()
-        + &temp1.zero()
-        + &temp2.zero()
-        + &temp3.zero()
-        + &x.set_from(lhs)
-        + &while_on(&x, temp0.inc() + &x.dec())
-        + &while_on(
-            &temp0,
-            while_on(&y, temp1.inc() + &temp2.inc() + &y.dec())
-            + &while_on(&temp2, y.inc() + &temp2.dec())
-            + &while_on(&temp1, 
-                temp2.inc()
-                + &temp0.dec()
-                + &while_on(&temp0, temp2.zero() + &temp3.inc() + &temp0.dec())
-                + &while_on(&temp3, temp0.inc() + &temp3.dec())
-                + &while_on(&temp2, temp1.dec() + &while_on(&temp1, x.dec() + &temp1.zero()) + &temp1.inc() + &temp2.dec())
-                + &temp1.dec()
-            ) + &x.inc()
-        )
+            + &temp1.zero()
+            + &temp2.zero()
+            + &temp3.zero()
+            + &x.set_from(lhs)
+            + &while_on(&x, temp0.inc() + &x.dec())
+            + &while_on(
+                &temp0,
+                while_on(&y, temp1.inc() + &temp2.inc() + &y.dec())
+                    + &while_on(&temp2, y.inc() + &temp2.dec())
+                    + &while_on(
+                        &temp1,
+                        temp2.inc()
+                            + &temp0.dec()
+                            + &while_on(&temp0, temp2.zero() + &temp3.inc() + &temp0.dec())
+                            + &while_on(&temp3, temp0.inc() + &temp3.dec())
+                            + &while_on(
+                                &temp2,
+                                temp1.dec()
+                                    + &while_on(&temp1, x.dec() + &temp1.zero())
+                                    + &temp1.inc()
+                                    + &temp2.dec(),
+                            )
+                            + &temp1.dec(),
+                    )
+                    + &x.inc(),
+            )
     }
 
     pub fn putchar(&self) -> String {
@@ -410,8 +462,7 @@ impl StaticLocation {
     pub fn putmsg(&self, msg: &str) -> String {
         let mut result = String::new();
         for ch in msg.bytes() {
-            result += &(self.set_const(ch as u64)
-            + &self.putchar())
+            result += &(self.set_const(ch as u64) + &self.putchar())
         }
         result
     }
@@ -468,14 +519,14 @@ impl StaticLocation {
     pub fn stack_deref(self) -> DynamicLocation {
         DynamicLocation::from(self).stack_deref()
     }
-    
+
     pub fn heap_deref(self) -> DynamicLocation {
         DynamicLocation::from(self).heap_deref()
     }
 }
 
 /// A StaticLocation on a brainfuck tape.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DynamicLocation {
     DerefHeap(StaticLocation),
     DerefStack(StaticLocation),
@@ -494,7 +545,7 @@ impl DynamicLocation {
             }
         }
     }
-    
+
     /// A fixed address on the tape.
     pub fn addr(addr: usize) -> Self {
         Self::Static(StaticLocation::Address(addr))
@@ -504,44 +555,35 @@ impl DynamicLocation {
         let temp0 = DYN_SET_TEMP;
 
         let src = src.into();
+        if self == &src {
+            return String::new();
+        }
         let dst = self.clone();
         use DynamicLocation::*;
         match (dst, src) {
             (Static(dst), Static(src)) => dst.set_from(src),
 
-            (Static(dst), DerefStack(src)) => {
-                STACK.get(src, dst)
-            }
-            (Static(dst), DerefHeap(src)) => {
-                HEAP.get(src, dst)
-            }
-            (DerefStack(dst), Static(src)) => {
-                STACK.set(dst, src)
-            }
-            (DerefHeap(dst), Static(src)) => {
-                HEAP.set(dst, src)
-            }
+            (Static(dst), DerefStack(src)) => STACK.get(src, dst),
+            (Static(dst), DerefHeap(src)) => HEAP.get(src, dst),
+            (DerefStack(dst), Static(src)) => STACK.set(dst, src),
+            (DerefHeap(dst), Static(src)) => HEAP.set(dst, src),
 
             (DerefStack(dst), DerefStack(src)) => {
                 // Get the value of `src` into `temp0`
-                STACK.get(src, temp0)
-                + &STACK.set(dst, temp0)
+                STACK.get(src, temp0) + &STACK.set(dst, temp0)
             }
             (DerefHeap(dst), DerefHeap(src)) => {
                 // Get the value of `src` into `temp0`
-                HEAP.get(src, temp0)
-                + &HEAP.set(dst, temp0)
+                HEAP.get(src, temp0) + &HEAP.set(dst, temp0)
             }
 
             (DerefStack(dst), DerefHeap(src)) => {
                 // Get the value of `src` into `temp0`
-                HEAP.get(src, temp0)
-                + &STACK.set(dst, temp0)
+                HEAP.get(src, temp0) + &STACK.set(dst, temp0)
             }
             (DerefHeap(dst), DerefStack(src)) => {
                 // Get the value of `src` into `temp0`
-                STACK.get(src, temp0)
-                + &HEAP.set(dst, temp0)
+                STACK.get(src, temp0) + &HEAP.set(dst, temp0)
             }
         }
     }
@@ -554,14 +596,8 @@ impl DynamicLocation {
     pub fn set_const(&self, value: u64) -> String {
         match self {
             Self::Static(loc) => loc.set_const(value),
-            Self::DerefStack(loc) => {
-                VAL_TEMP.set_const(value)
-                + &STACK.set(*loc, VAL_TEMP)
-            },
-            Self::DerefHeap(loc) => {
-                VAL_TEMP.set_const(value)
-                + &HEAP.set(*loc, VAL_TEMP)
-            }
+            Self::DerefStack(loc) => VAL_TEMP.set_const(value) + &STACK.set(*loc, VAL_TEMP),
+            Self::DerefHeap(loc) => VAL_TEMP.set_const(value) + &HEAP.set(*loc, VAL_TEMP),
         }
     }
 
@@ -580,14 +616,10 @@ impl DynamicLocation {
         match self {
             Self::Static(loc) => loc.add_const(value),
             Self::DerefStack(loc) => {
-                STACK.get(*loc, VAL_TEMP)
-                + &VAL_TEMP.add_const(value)
-                + &STACK.set(*loc, VAL_TEMP)
-            },
+                STACK.get(*loc, VAL_TEMP) + &VAL_TEMP.add_const(value) + &STACK.set(*loc, VAL_TEMP)
+            }
             Self::DerefHeap(loc) => {
-                HEAP.get(*loc, VAL_TEMP)
-                + &VAL_TEMP.add_const(value)
-                + &HEAP.set(*loc, VAL_TEMP)
+                HEAP.get(*loc, VAL_TEMP) + &VAL_TEMP.add_const(value) + &HEAP.set(*loc, VAL_TEMP)
             }
         }
     }
@@ -599,29 +631,42 @@ impl DynamicLocation {
         match self {
             Self::Static(loc) => loc.sub_const(value),
             Self::DerefStack(loc) => {
-                STACK.get(*loc, VAL_TEMP)
-                + &VAL_TEMP.sub_const(value)
-                + &STACK.set(*loc, VAL_TEMP)
-            },
+                STACK.get(*loc, VAL_TEMP) + &VAL_TEMP.sub_const(value) + &STACK.set(*loc, VAL_TEMP)
+            }
             Self::DerefHeap(loc) => {
-                HEAP.get(*loc, VAL_TEMP)
-                + &VAL_TEMP.sub_const(value)
-                + &HEAP.set(*loc, VAL_TEMP)
+                HEAP.get(*loc, VAL_TEMP) + &VAL_TEMP.sub_const(value) + &HEAP.set(*loc, VAL_TEMP)
             }
         }
     }
 
-    pub fn static_binop(binop: impl Fn(StaticLocation, StaticLocation, StaticLocation) -> String, dest: DynamicLocation, lhs: DynamicLocation, rhs: DynamicLocation) -> String {
+    pub fn static_binop(
+        binop: impl Fn(StaticLocation, StaticLocation, StaticLocation) -> String,
+        dest: DynamicLocation,
+        lhs: DynamicLocation,
+        rhs: DynamicLocation,
+    ) -> String {
         Self::from(DYN_OP_TEMP0).set_from(lhs)
-        + &Self::from(DYN_OP_TEMP1).set_from(rhs)
-        + &binop(DYN_OP_TEMP2, DYN_OP_TEMP0, DYN_OP_TEMP1)
-        + &dest.set_from(DYN_OP_TEMP2)
+            + &Self::from(DYN_OP_TEMP1).set_from(rhs)
+            + &binop(DYN_OP_TEMP2, DYN_OP_TEMP0, DYN_OP_TEMP1)
+            + &dest.set_from(DYN_OP_TEMP2)
     }
 
-    pub fn static_unop(unop: impl Fn(StaticLocation, StaticLocation) -> String, dest: DynamicLocation, src: DynamicLocation) -> String {
+    pub fn static_unop(
+        unop: impl Fn(StaticLocation, StaticLocation) -> String,
+        dest: DynamicLocation,
+        src: DynamicLocation,
+    ) -> String {
         Self::from(DYN_OP_TEMP0).set_from(src)
-        + &unop(DYN_OP_TEMP1, DYN_OP_TEMP0)
-        + &dest.set_from(DYN_OP_TEMP1)
+            + &unop(DYN_OP_TEMP1, DYN_OP_TEMP0)
+            + &dest.set_from(DYN_OP_TEMP1)
+    }
+
+    pub fn negate(dest: DynamicLocation, src: DynamicLocation) -> String {
+        Self::static_unop(StaticLocation::negate, dest, src)
+    }
+
+    pub fn boolean_not(dest: DynamicLocation, src: DynamicLocation) -> String {
+        Self::static_unop(StaticLocation::boolean_not, dest, src)
     }
 
     pub fn getchar(&self) -> String {
@@ -690,7 +735,7 @@ impl std::fmt::Display for StaticLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StaticLocation::Address(addr) => write!(f, "@{addr}"),
-            StaticLocation::Named {name, addr} => write!(f, "{name}@{addr}"),
+            StaticLocation::Named { name, addr } => write!(f, "{name}@{addr}"),
         }
     }
 }
@@ -698,8 +743,8 @@ impl std::fmt::Display for DynamicLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DynamicLocation::Static(loc) => write!(f, "{loc}"),
-            DynamicLocation::DerefStack(loc) => write!(f, "SP({loc})"),
-            DynamicLocation::DerefHeap(loc) => write!(f, "HP({loc})"),
+            DynamicLocation::DerefStack(loc) => write!(f, "[{loc}]"),
+            DynamicLocation::DerefHeap(loc) => write!(f, "(heap) [{loc}]"),
         }
     }
 }
@@ -733,7 +778,11 @@ mod tests {
             .spawn()
             .expect("Failed to execute command");
         let output = cmd.wait_with_output().expect("Failed to read stdout");
-        assert!(output.status.success(), "Command failed with status: {}", output.status);
+        assert!(
+            output.status.success(),
+            "Command failed with status: {}",
+            output.status
+        );
         drop(lock);
         // // Now run the generated file
         // let mut cmd = std::process::Command::new("./main.exe")
@@ -763,7 +812,7 @@ mod tests {
             println!("{}", val.set_const(byte as u64));
             println!("{}", table.set(idx, val));
         }
-        
+
         for i in 0..text.len() {
             println!("{}", idx.set_const(i as u64));
             println!("{}", table.get(idx, val));
@@ -782,7 +831,6 @@ mod tests {
         let b = global_alloc(1);
         let c = global_alloc(1);
 
-
         let mut result = String::new();
         // result += &a.set_const(0xff);
         // result += &a.get(b);
@@ -796,7 +844,8 @@ mod tests {
 
         std::fs::File::create("test-math.b")
             .expect("Failed to create file")
-            .write_all(result.as_bytes()).unwrap();
+            .write_all(result.as_bytes())
+            .unwrap();
 
         compile_and_run("test-math.b");
     }
@@ -808,7 +857,6 @@ mod tests {
         let a = global_alloc(1);
         let b = global_alloc(1);
         let c = global_alloc(1);
-
 
         let mut result = String::new();
         // result += &a.set_const(0xff);
@@ -823,7 +871,8 @@ mod tests {
 
         std::fs::File::create("test-math.b")
             .expect("Failed to create file")
-            .write_all(result.as_bytes()).unwrap();
+            .write_all(result.as_bytes())
+            .unwrap();
 
         compile_and_run("test-math.b");
     }
@@ -835,7 +884,6 @@ mod tests {
         let a = global_alloc(1);
         let b = global_alloc(1);
         let c = global_alloc(1);
-
 
         let mut result = String::new();
         // result += &a.set_const(0xff);
@@ -850,7 +898,8 @@ mod tests {
 
         std::fs::File::create("test-math.b")
             .expect("Failed to create file")
-            .write_all(result.as_bytes()).unwrap();
+            .write_all(result.as_bytes())
+            .unwrap();
 
         compile_and_run("test-math.b");
     }
@@ -862,7 +911,6 @@ mod tests {
         let b = global_alloc(1);
         let c = global_alloc(1);
         let newline = global_alloc(1);
-
 
         let mut result = String::new();
         // result += &a.get(b);
@@ -882,22 +930,20 @@ mod tests {
         result += &newline.putchar();
         result += &newline.putchar();
 
-
         std::fs::File::create("test-putint.b")
             .expect("Failed to create file")
-            .write_all(result.as_bytes()).unwrap();
+            .write_all(result.as_bytes())
+            .unwrap();
 
         compile_and_run("test-putint.b");
     }
-    
+
     #[test]
     fn test_equals() {
-        
         // allocate_registers_and_stack();
         let a = global_alloc(1);
         let b = global_alloc(1);
         let c = global_alloc(1);
-
 
         let mut result = String::new();
         // result += &a.set_const(0xff);
@@ -912,7 +958,8 @@ mod tests {
 
         std::fs::File::create("test-equals.b")
             .expect("Failed to create file")
-            .write_all(result.as_bytes()).unwrap();
+            .write_all(result.as_bytes())
+            .unwrap();
 
         compile_and_run("test-equals.b");
     }
@@ -923,7 +970,6 @@ mod tests {
         let a = global_alloc(1);
         let b = global_alloc(1);
         let c = global_alloc(1);
-
 
         let mut result = String::new();
         result += &b.set_const(20);
@@ -939,7 +985,8 @@ mod tests {
 
         std::fs::File::create("test-if-stmt.b")
             .expect("Failed to create file")
-            .write_all(result.as_bytes()).unwrap();
+            .write_all(result.as_bytes())
+            .unwrap();
 
         compile_and_run("test-if-stmt.b");
     }

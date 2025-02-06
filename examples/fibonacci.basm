@@ -1,0 +1,27 @@
+main:
+    // The fibonacci iteration count
+    R0 = 13
+    // The current fibonacci number
+    R1 = 0
+    // The previous fibonacci number
+    R2 = 1
+    // The next fibonacci number
+    R3 = 0
+
+    log "Fibonacci sequence:\n" // Print the header
+    loop: // The loop label
+        R3 = R1
+        R1 add R2
+        R2 = R3
+
+        putint R1
+        putchar '\n'
+
+        dec R0
+        R4 eq R0, 0
+        jmp_if R4, end
+
+        jmp loop
+    end:
+        log "Done!\n"
+    quit

@@ -1,0 +1,92 @@
+main:
+    log "Enter a number: "
+    call getint
+    log "You entered: "
+    putint [SP]
+
+    log "\nYour number plus one is: "
+    inc [SP]
+    putint [SP]
+    log "\n"
+    quit
+
+getint:
+    // Push the return value
+    push 0
+    // The current int value is in R0
+    push R0
+    // Get char input is in R1
+    push R1
+    // Store the address of the return value
+    push R2
+
+    R0 = 0
+    R2 lea [SP] - 3
+    loop:
+        getchar R1
+        push R1
+        call isdigit
+        dec [SP]
+        jmp_if [SP], end
+        pop
+        R1 sub '0'
+        R0 mul 10
+        R0 add R1
+        jmp loop
+    end:
+        pop
+        [R2] = R0
+        pop R2
+        pop R1
+        pop R0
+        ret
+
+
+isdigit:
+    push R0
+    push R1
+
+    R1 lea [SP] - 2
+
+    // Check if equals '0'
+    R0 eq [R1], '0'
+    jmp_if R0, is_digit_true
+    // Check if equals '1'
+    R0 eq [R1], '1'
+    jmp_if R0, is_digit_true
+    // Check if equals '2'
+    R0 eq [R1], '2'
+    jmp_if R0, is_digit_true
+    // Check if equals '3'
+    R0 eq [R1], '3'
+    jmp_if R0, is_digit_true
+    // Check if equals '4'
+    R0 eq [R1], '4'
+    jmp_if R0, is_digit_true
+    // Check if equals '5'
+    R0 eq [R1], '5'
+    jmp_if R0, is_digit_true
+    // Check if equals '6'
+    R0 eq [R1], '6'
+    jmp_if R0, is_digit_true
+    // Check if equals '7'
+    R0 eq [R1], '7'
+    jmp_if R0, is_digit_true
+    // Check if equals '8'
+    R0 eq [R1], '8'
+    jmp_if R0, is_digit_true
+    // Check if equals '9'
+    R0 eq [R1], '9'
+    jmp_if R0, is_digit_true
+    // Otherwise, return false
+
+    [R1] = 0
+    pop R1
+    pop R0
+    ret
+
+    is_digit_true:
+        [R1] = 1
+        pop R1
+        pop R0
+        ret

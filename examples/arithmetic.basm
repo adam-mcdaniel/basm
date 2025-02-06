@@ -1,0 +1,23 @@
+
+R0 = 5
+R1 = 10
+
+;; Add R0 and R1
+R2 add R0, R1 ;; R2 = 15
+putint R2
+putchar '\n'
+
+;; Subtract R1 from R0
+R2 sub R0, R1 ;; R2 = -5 (251 on 8-bit unsigned)
+putint R2
+putchar '\n'
+
+;; Multiply R0 and R1
+R2 mul R0, R1 ;; R2 = 50
+putint R2
+putchar '\n'
+
+;; Divide R1 by R0
+R2 div R1, R0 ;; R2 = 2
+putint R2
+putchar '\n'

@@ -1,12 +1,12 @@
 use std::{
+    fs::File,
     io::Write,
     process::{Command, Stdio},
-    fs::File,
     sync::Mutex,
 };
 
-use tracing::*;
 use lazy_static::lazy_static;
+use tracing::*;
 
 mod parse;
 // Create a compile lock
@@ -28,6 +28,23 @@ pub fn simplify_bf(mut bf: String) -> String {
     for op in &ops {
         // bf.push_str(&op.to_bf());
         op.write_bf(&mut bf, 1);
+    }
+    bf
+}
+
+pub fn compile_to_ook(mut bf: String) -> String {
+    info!("Compiling brainfuck to Ook...");
+    // Parse with nom
+    let ops = match parse::parse(&bf) {
+        Ok(ops) => ops,
+        Err(e) => {
+            error!("Failed to parse brainfuck: {e}");
+            return String::new();
+        }
+    };
+    bf.clear();
+    for op in &ops {
+        op.write_ook(&mut bf, 1);
     }
     bf
 }
@@ -64,7 +81,7 @@ pub fn compile_to_c(mut bf: String, bytes: u8) -> String {
     for op in &ops {
         bf.push_str("    ");
         // bf.push_str(&op.to_c());
-        op.write_c(&mut bf,);
+        op.write_c(&mut bf);
         bf.push('\n');
     }
     bf.push_str("    free(tape);\n");
@@ -80,13 +97,13 @@ pub fn compile_to_exe(mut bf: String, bytes: u8) -> Result<(), Box<dyn std::erro
     // file.write_all(bf.as_bytes())?;
     bf = simplify_bf(bf.clone());
     file.write_all(bf.as_bytes())?;
-    
+
     info!("Compiling brainfuck...");
     let c = compile_to_c(bf, bytes);
     info!("Creating output file...");
     let mut file = File::create("main.c")?;
     file.write_all(c.as_bytes())?;
-    
+
     info!("Compiling to executable...");
     let child = Command::new("gcc")
         .arg("main.c")
@@ -112,7 +129,11 @@ pub fn compile_and_run(bf: String, bytes: u8) -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
-pub fn compile_and_run_with_input(bf: String, input: &str, bytes: u8) -> Result<String, Box<dyn std::error::Error>> {
+pub fn compile_and_run_with_input(
+    bf: String,
+    input: &str,
+    bytes: u8,
+) -> Result<String, Box<dyn std::error::Error>> {
     let lock = COMPILE_LOCK.lock().unwrap();
     compile_to_exe(bf, bytes)?;
     // std::process::Command::new(&format!("./{filename}")).status()?;
@@ -165,26 +186,42 @@ impl Op {
                 *x += y;
                 true
             }
-            (Self::Zero, Self::Zero) => {
-                true
-            }
+            (Self::Zero, Self::Zero) => true,
             _ => false,
         }
     }
 
-    pub fn from_char(c: char) -> Option<Self> {
-        match c {
-            '>' => Some(Self::Move(1)),
-            '<' => Some(Self::Move(-1)),
-            '+' => Some(Self::Add(1)),
-            '-' => Some(Self::Add(-1)),
-            '.' => Some(Self::Put),
-            ',' => Some(Self::Get),
-            '[' => Some(Self::While),
-            ']' => Some(Self::End),
-            '#' => Some(Self::HexDump),
-            '$' => Some(Self::DecDump),
-            _ => None,
+    pub fn write_ook(&self, ook: &mut String, target_cell_bytes: u8) {
+        if target_cell_bytes != 1 {
+            panic!("Unsupported cell size: {target_cell_bytes}");
+        }
+
+        match self {
+            Self::Move(n) => {
+                if *n > 0 {
+                    ook.push_str(&"Ook. Ook? ".repeat(*n as usize));
+                } else {
+                    ook.push_str(&"Ook? Ook. ".repeat(*n as usize));
+                }
+            }
+            Self::Add(n) => {
+                if *n > 0 {
+                    ook.push_str(&"Ook. Ook. ".repeat(*n as usize));
+                } else {
+                    ook.push_str(&"Ook! Ook! ".repeat(-*n as usize));
+                }
+            }
+            Self::Zero => {
+                Self::While.write_ook(ook, target_cell_bytes);
+                Self::Add(-1).write_ook(ook, target_cell_bytes);
+                Self::End.write_ook(ook, target_cell_bytes);
+            }
+            Self::Put => ook.push_str("Ook! Ook. "),
+            Self::Get => ook.push_str("Ook. Ook! "),
+
+            Self::While => ook.push_str("Ook! Ook? "),
+            Self::End => ook.push_str("Ook? Ook! "),
+            _ => {}
         }
     }
 
@@ -274,35 +311,35 @@ impl Op {
         }
     }
 
-//     pub fn to_c(&self) -> String {
-//         match self {
-//             Self::Move(n) => format!("ptr += {n};"),
-//             Self::Add(n) => format!("*ptr += {n};"),
-//             Self::Zero => "*ptr = 0;".to_string(),
-//             Self::Put => "putchar(*ptr);".to_string(),
-//             Self::Get => "*ptr = (ch = getchar()) == EOF? 0 : ch;".to_string(),
-//             Self::While => "while (*ptr) {".to_string(),
-//             Self::End => "}".to_string(),
-//             Self::HexDump => r#"for (int i = 0; i < 0x100; i++) {
-//     if (i % 16 == 0) {
-//         printf("%03d-%03d: ", i, i + 15);
-//     }
-//     printf("%02x ", tape[i]);
-//     if ((i + 1) % 16 == 0) {
-//         printf("\n");
-//     }
-// }"#.to_string(),
-//             Self::DecDump => r#"for (int i = 0; i < 0x100; i++) {
-//     if (i % 16 == 0) {
-//         printf("%03d-%03d: ", i, i + 15);
-//     }
-//     printf("%3d ", tape[i]);
-//     if ((i + 1) % 16 == 0) {
-//         printf("\n");
-//     }
-// }"#.to_string(),
-//         }
-//     }
+    //     pub fn to_c(&self) -> String {
+    //         match self {
+    //             Self::Move(n) => format!("ptr += {n};"),
+    //             Self::Add(n) => format!("*ptr += {n};"),
+    //             Self::Zero => "*ptr = 0;".to_string(),
+    //             Self::Put => "putchar(*ptr);".to_string(),
+    //             Self::Get => "*ptr = (ch = getchar()) == EOF? 0 : ch;".to_string(),
+    //             Self::While => "while (*ptr) {".to_string(),
+    //             Self::End => "}".to_string(),
+    //             Self::HexDump => r#"for (int i = 0; i < 0x100; i++) {
+    //     if (i % 16 == 0) {
+    //         printf("%03d-%03d: ", i, i + 15);
+    //     }
+    //     printf("%02x ", tape[i]);
+    //     if ((i + 1) % 16 == 0) {
+    //         printf("\n");
+    //     }
+    // }"#.to_string(),
+    //             Self::DecDump => r#"for (int i = 0; i < 0x100; i++) {
+    //     if (i % 16 == 0) {
+    //         printf("%03d-%03d: ", i, i + 15);
+    //     }
+    //     printf("%3d ", tape[i]);
+    //     if ((i + 1) % 16 == 0) {
+    //         printf("\n");
+    //     }
+    // }"#.to_string(),
+    //         }
+    //     }
 
     pub fn write_c(&self, bf: &mut String) {
         match self {
@@ -313,7 +350,8 @@ impl Op {
             Self::Get => bf.push_str("*ptr = (ch = getchar()) == EOF? 0 : ch;"),
             Self::While => bf.push_str("while (*ptr) {"),
             Self::End => bf.push('}'),
-            Self::HexDump => bf.push_str(r#"for (int i = 0; i < 0x100; i++) {
+            Self::HexDump => bf.push_str(
+                r#"for (int i = 0; i < 0x100; i++) {
     if (i % 16 == 0) {
         printf("%03d-%03d: ", i, i + 15);
     }
@@ -321,8 +359,10 @@ impl Op {
     if ((i + 1) % 16 == 0) {
         printf("\n");
     }
-}"#),
-            Self::DecDump => bf.push_str(r#"for (int i = 0; i < 0x100; i++) {
+}"#,
+            ),
+            Self::DecDump => bf.push_str(
+                r#"for (int i = 0; i < 0x100; i++) {
     if (i % 16 == 0) {
         printf("%03d-%03d: ", i, i + 15);
     }
@@ -330,7 +370,8 @@ impl Op {
     if ((i + 1) % 16 == 0) {
         printf("\n");
     }
-}"#),
+}"#,
+            ),
         }
     }
 }

@@ -1,0 +1,15 @@
+
+;; Push some elements on the stack
+push 1
+push 2
+push 3
+
+putint [SP] ;; Prints 3
+
+R0 lea [SP] - 1 ;; R0 points to 2
+;; Prints 2
+putint [R0]
+
+R0 lea [R0] - 1 ;; R0 points to 1
+;; Prints 1
+putint [R0]

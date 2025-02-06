@@ -1,16 +1,8 @@
 main:
-    putchar 'F'
-    putchar 'a'
-    putchar 'c'
-    putchar 't'
-    putchar ' '
-    putchar 'o'
-    putchar 'f'
-    putchar ' '
+    log "Fact of "
     R0 = 5
     putint R0
-    putchar ':'
-    putchar ' '
+    log " is "
     push R0
     call fact
     putint [SP]

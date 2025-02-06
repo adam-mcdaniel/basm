@@ -1,11 +1,10 @@
 use super::*;
-use tracing::*;
 
 mod parse;
 pub use parse::parse;
 
-use std::sync::RwLock;
 use std::collections::HashMap;
+use std::sync::RwLock;
 
 pub const NULL: StaticLocation = StaticLocation::Address(0);
 
@@ -40,33 +39,27 @@ registers!(
     CURRENT_BASIC_BLOCK,
     CURRENT_BASIC_BLOCK_EQ0,
     CURRENT_BASIC_BLOCK_EQ1,
-
     SP,
     HP,
     IDX_TEMP,
     VAL_TEMP,
     CALL_SP,
     PUSH_TEMP,
-
-
     T0,
     T1,
     T2,
     T3,
     T4,
     T5,
-
     R0,
     R1,
     R2,
     R3,
     R4,
     R5,
-
     DYN_OP_TEMP0,
     DYN_OP_TEMP1,
     DYN_OP_TEMP2,
-
     PUT_INT0,
     PUT_INT1,
     PUT_INT2,
@@ -77,23 +70,18 @@ registers!(
     PUT_INT7,
     PUT_INT8,
     PUT_INT10,
-    
     JMP_TEMP,
-    
     SET_TEMP,
     DYN_SET_TEMP,
     EQUALS_TEMP0,
     EQUALS_TEMP1,
     NOT_EQUALS_TEMP0,
     NOT_EQUALS_TEMP1,
-
     MATH_TEMP0,
     MATH_TEMP1,
     MATH_TEMP2,
     MATH_TEMP3,
-
     IF_TEMP0,
-
     R6,
     R7,
     R8,
@@ -104,20 +92,18 @@ registers!(
     R13,
     R14,
     R15,
-
     ZERO,
     TRASH,
 );
 
-fn debug_helper(regs: &[StaticLocation]) -> String {
+fn log(msg: String, locations: &[DynamicLocation]) -> String {
     let mut result = String::new();
-
-    for reg in regs {
-        result.push_str(&TRASH.putmsg(&format!("{reg}=")));
-        result.push_str(&reg.putint());
-        result.push_str(&TRASH.putmsg(&format!("\n")));
+    result.push_str(&TRASH.putmsg(&msg));
+    for location in locations {
+        result.push_str(&TRASH.putmsg(&format!("{location} = ")));
+        result.push_str(&location.putint());
+        result.push_str(&TRASH.putmsg("\n"));
     }
-
     result
 }
 
@@ -156,7 +142,10 @@ pub fn allocate_string(string: &str) -> (StaticLocation, String) {
 
 pub fn register(name: &str) -> StaticLocation {
     // REGISTERS[i]
-    let index = REGISTER_NAMES.iter().position(|&r| r == name).expect(format!("Unknown register: {name}").as_str());
+    let index = REGISTER_NAMES
+        .iter()
+        .position(|&r| r == name)
+        .expect(format!("Unknown register: {name}").as_str());
     REGISTERS[index]
 }
 
@@ -170,18 +159,16 @@ lazy_static! {
         let call_stack = allocate_call_stack();
         (stack, heap, call_stack)
     };
-
     pub static ref STACK: Table = STACK_HEAP_CALL_STACK.0;
     pub static ref HEAP: Table = STACK_HEAP_CALL_STACK.1;
     pub static ref CALL_STACK: Table = STACK_HEAP_CALL_STACK.2;
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub enum Operand {
     /// A static location is one of:
     /// - A register "R0" (=StaticLocation::register("R0"))
-    /// 
+    ///
     /// A dynamic location is one of:
     /// - A static location (=DynamicLocation::Static(StaticLocation))
     /// - A stack dereference of a static location "SP[R0]" (=DynamicLocation::DerefStack(StaticLocation))
@@ -198,13 +185,13 @@ pub enum BasicBlockOp {
     Push(Operand),
     /// `pop R0` pops the top of the stack into R0
     /// `pop` pops the top of the stack
-    /// 
+    ///
     /// An immediate may not be used here
     Pop(Option<DynamicLocation>),
 
     /// Get a character from the input and store it in the operand,
     /// if supplied. Otherwise, the character is discarded.
-    /// 
+    ///
     /// `getchar R0` gets a character from the user and stores it in R0.
     /// `getchar SP[R0]` gets a character from the user and stores it in the stack location pointed to by R0.
     GetChar(Option<DynamicLocation>),
@@ -214,11 +201,11 @@ pub enum BasicBlockOp {
     /// Get an integer operand and print it.
     PutInt(Operand),
 
+    /// Print a string literal
+    Log(String, Vec<DynamicLocation>),
+
     /// Set a dynamic location to a value.
-    Set {
-        src: Operand,
-        dest: DynamicLocation,
-    },
+    Set { src: Operand, dest: DynamicLocation },
 
     /// Get the effective address of a dynamic location and store it in the destination.
     GetAddr {
@@ -255,18 +242,9 @@ pub enum BasicBlockOp {
         rhs: Operand,
         dest: DynamicLocation,
     },
-    /// Modulo two operands and store the result in the destination.
-    Mod {
-        lhs: Operand,
-        rhs: Operand,
-        dest: DynamicLocation,
-    },
 
     /// Negate an operand and store the result in the destination.
-    Neg {
-        src: Operand,
-        dest: DynamicLocation,
-    },
+    Neg { src: Operand, dest: DynamicLocation },
 
     /// Check if two operands are equal and store the result in the destination.
     Eq {
@@ -282,7 +260,9 @@ pub enum BasicBlockOp {
         dest: DynamicLocation,
     },
 
+    /// Increment a dynamic location by an optional amount.
     Inc(DynamicLocation, Option<u64>),
+    /// Decrement a dynamic location by an optional amount.
     Dec(DynamicLocation, Option<u64>),
 
     /// Print a hexadecimal dump
@@ -292,39 +272,29 @@ pub enum BasicBlockOp {
 }
 
 fn push_to_call_stack(loc: StaticLocation) -> String {
-    CALL_SP.inc()
-    + &CALL_STACK.set(CALL_SP, loc)
+    CALL_SP.inc() + &CALL_STACK.set(CALL_SP, loc)
 }
 
 fn pop_from_call_stack(loc: StaticLocation) -> String {
-    CALL_STACK.get(CALL_SP, loc)
-    + &CALL_SP.dec()
+    CALL_STACK.get(CALL_SP, loc) + &CALL_SP.dec()
 }
 
 fn push(op: Operand) -> String {
     use Operand::*;
     match op {
-        Immediate(n) => {
-            SP.inc()
-            + &SP.stack_deref().set_const(n as u64)
-        }
+        Immediate(n) => SP.inc() + &SP.stack_deref().set_const(n as u64),
         Location(loc) => {
             DynamicLocation::from(PUSH_TEMP).set_from(loc)
-            + &SP.inc()
-            + &SP.stack_deref().set_from(PUSH_TEMP)
+                + &SP.inc()
+                + &SP.stack_deref().set_from(PUSH_TEMP)
         }
     }
 }
 
 fn pop(op: Option<DynamicLocation>) -> String {
     match op {
-        None => {
-            SP.dec()
-        }
-        Some(loc) => {
-            loc.set_from(SP.stack_deref())
-            + &SP.dec()
-        }
+        None => SP.dec(),
+        Some(loc) => loc.set_from(SP.stack_deref()) + &SP.dec(),
     }
 }
 
@@ -333,48 +303,33 @@ impl BasicBlockOp {
         use BasicBlockOp::*;
         use Operand::*;
         match self {
-            Push(op) => {
-                push(*op)
-            }
+            Push(op) => push(*op),
 
-            Pop(op) => {
-                pop(*op)
-            }
+            Pop(op) => pop(*op),
 
-            HexDump => {
-                "#".to_string()
-            }
-            DecimalDump => {
-                "$".to_string()
-            }
+            HexDump => "#".to_string(),
+            DecimalDump => "$".to_string(),
 
-            Inc(loc, amount) => {
-                match amount {
-                    None => {
-                        loc.inc()
-                    }
-                    Some(amount) => {
-                        loc.add_const(*amount as i64)
-                    }
-                }
-            }
+            Log(msg, locations) => log(msg.clone(), locations),
 
-            Dec(loc, amount) => {
-                match amount {
-                    None => {
-                        loc.dec()
-                    }
-                    Some(amount) => {
-                        loc.sub_const(*amount as i64)
-                    }
-                }
-            }
+            Inc(loc, amount) => match amount {
+                None => loc.inc(),
+                Some(amount) => loc.add_const(*amount as i64),
+            },
 
-            GetAddr { src, dest, offset, negative } => {
+            Dec(loc, amount) => match amount {
+                None => loc.dec(),
+                Some(amount) => loc.sub_const(*amount as i64),
+            },
+
+            GetAddr {
+                src,
+                dest,
+                offset,
+                negative,
+            } => {
                 match (src, offset) {
-                    (DynamicLocation::Static(loc), None) => {
-                        dest.set_const(loc.address() as u64)
-                    }
+                    (DynamicLocation::Static(loc), None) => dest.set_const(loc.address() as u64),
                     (DynamicLocation::DerefStack(loc), None) => {
                         dest.set_from(*loc)
                         // + &dest.add_const(*offset)
@@ -384,38 +339,39 @@ impl BasicBlockOp {
                         // + &dest.add_const(*offset)
                     }
 
-                    (DynamicLocation::Static(loc), Some(Immediate(n))) => {
-                        dest.set_const((loc.address() as i64 + if *negative {-(*n as i64)} else {*n as i64}) as u64)
-                    }
+                    (DynamicLocation::Static(loc), Some(Immediate(n))) => dest.set_const(
+                        (loc.address() as i64 + if *negative { -(*n as i64) } else { *n as i64 })
+                            as u64,
+                    ),
                     (DynamicLocation::Static(loc), Some(Location(offset))) => {
                         dest.set_const(loc.address() as u64)
-                        + &DynamicLocation::plus(*dest, *dest, *offset)
+                            + &DynamicLocation::plus(*dest, *dest, *offset)
                     }
 
                     (DynamicLocation::DerefStack(loc), Some(Immediate(n))) => {
                         dest.set_from(*loc)
-                        + &if *negative {
-                            dest.sub_const(*n as i64)
-                        } else {
-                            dest.add_const(*n as i64)
-                        }
+                            + &if *negative {
+                                dest.sub_const(*n as i64)
+                            } else {
+                                dest.add_const(*n as i64)
+                            }
                     }
                     (DynamicLocation::DerefStack(loc), Some(Location(offset))) => {
                         dest.set_from(*loc)
-                        + &if *negative {
-                            DynamicLocation::minus(*dest, *dest, *offset)
-                        } else {
-                            DynamicLocation::plus(*dest, *dest, *offset)
-                        }
+                            + &if *negative {
+                                DynamicLocation::minus(*dest, *dest, *offset)
+                            } else {
+                                DynamicLocation::plus(*dest, *dest, *offset)
+                            }
                     }
 
                     (DynamicLocation::DerefHeap(loc), Some(Immediate(n))) => {
                         dest.set_from(*loc)
-                        + &if *negative {
-                            dest.sub_const(*n as i64)
-                        } else {
-                            dest.add_const(*n as i64)
-                        }
+                            + &if *negative {
+                                dest.sub_const(*n as i64)
+                            } else {
+                                dest.add_const(*n as i64)
+                            }
                     }
                     (DynamicLocation::DerefHeap(loc), Some(Location(offset))) => {
                         dest.set_from(*loc)
@@ -429,162 +385,108 @@ impl BasicBlockOp {
                 }
             }
 
-            Set { src, dest} => {
-                match src {
-                    Immediate(n) => {
-                        dest.set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        dest.set_from(*loc)
-                    }
-                }
-            }
+            Set { src, dest } => match src {
+                Immediate(n) => dest.set_const(*n as u64),
+                Location(loc) => dest.set_from(*loc),
+            },
 
-            GetChar(None) => {
-                TRASH.getchar()
-            }
-            GetChar(Some(loc)) => {
-                loc.getchar()
-            }
+            GetChar(None) => TRASH.getchar(),
+            GetChar(Some(loc)) => loc.getchar(),
 
-            PutChar(Immediate(n)) => {
-                TRASH.set_const(*n as u64)
-                + &TRASH.putchar()
-            }
-            PutChar(Location(loc)) => {
-                loc.putchar()
-            }
+            PutChar(Immediate(n)) => TRASH.set_const(*n as u64) + &TRASH.putchar(),
+            PutChar(Location(loc)) => loc.putchar(),
 
-            PutInt(Immediate(n)) => {
-                TRASH.set_const(*n as u64)
-                + &TRASH.putint()
-            }
-            PutInt(Location(loc)) => {
-                loc.putint()
-            }
+            PutInt(Immediate(n)) => TRASH.set_const(*n as u64) + &TRASH.putint(),
+            PutInt(Location(loc)) => loc.putint(),
 
             Add { lhs, rhs, dest } => {
                 let lhs = match lhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T0).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T0).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T0).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T0).set_from(*loc),
                 };
                 let rhs = match rhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T1).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T1).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T1).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T1).set_from(*loc),
                 };
-                lhs
-                + &rhs
-                + &DynamicLocation::static_binop(StaticLocation::plus, *dest, T0.into(), T1.into())
+                lhs + &rhs
+                    + &DynamicLocation::static_binop(
+                        StaticLocation::plus,
+                        *dest,
+                        T0.into(),
+                        T1.into(),
+                    )
             }
 
             Sub { lhs, rhs, dest } => {
                 let lhs = match lhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T0).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T0).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T0).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T0).set_from(*loc),
                 };
                 let rhs = match rhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T1).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T1).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T1).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T1).set_from(*loc),
                 };
-                lhs
-                + &rhs
-                + &DynamicLocation::static_binop(StaticLocation::minus, *dest, T0.into(), T1.into())
+                lhs + &rhs
+                    + &DynamicLocation::static_binop(
+                        StaticLocation::minus,
+                        *dest,
+                        T0.into(),
+                        T1.into(),
+                    )
             }
 
             Mul { lhs, rhs, dest } => {
                 let lhs = match lhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T0).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T0).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T0).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T0).set_from(*loc),
                 };
                 let rhs = match rhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T1).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T1).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T1).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T1).set_from(*loc),
                 };
-                lhs
-                + &rhs
-                + &DynamicLocation::static_binop(StaticLocation::times, *dest, T0.into(), T1.into())
+                lhs + &rhs
+                    + &DynamicLocation::static_binop(
+                        StaticLocation::times,
+                        *dest,
+                        T0.into(),
+                        T1.into(),
+                    )
             }
 
             Div { lhs, rhs, dest } => {
                 let lhs = match lhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T0).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T0).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T0).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T0).set_from(*loc),
                 };
                 let rhs = match rhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T1).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T1).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T1).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T1).set_from(*loc),
                 };
-                lhs
-                + &rhs
-                + &DynamicLocation::static_binop(StaticLocation::divide, *dest, T0.into(), T1.into())
-            }
-
-
-            Mod { lhs, rhs, dest } => {
-                todo!()
+                lhs + &rhs
+                    + &DynamicLocation::static_binop(
+                        StaticLocation::divide,
+                        *dest,
+                        T0.into(),
+                        T1.into(),
+                    )
             }
 
             Neg { src, dest } => {
                 let src = match src {
-                    Immediate(n) => {
-                        DynamicLocation::from(T0).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T0).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T0).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T0).set_from(*loc),
                 };
-                src
-                + &DynamicLocation::static_unop(StaticLocation::negate, *dest, T0.into())
+                src + &DynamicLocation::static_unop(StaticLocation::negate, *dest, T0.into())
             }
 
             Eq { lhs, rhs, dest } => {
                 let lhs = match lhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T0).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T0).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T0).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T0).set_from(*loc),
                 };
                 let rhs = match rhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T1).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T1).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T1).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T1).set_from(*loc),
                 };
                 lhs
                 + &rhs
@@ -595,24 +497,20 @@ impl BasicBlockOp {
 
             Ne { lhs, rhs, dest } => {
                 let lhs = match lhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T0).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T0).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T0).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T0).set_from(*loc),
                 };
                 let rhs = match rhs {
-                    Immediate(n) => {
-                        DynamicLocation::from(T1).set_const(*n as u64)
-                    }
-                    Location(loc) => {
-                        DynamicLocation::from(T1).set_from(*loc)
-                    }
+                    Immediate(n) => DynamicLocation::from(T1).set_const(*n as u64),
+                    Location(loc) => DynamicLocation::from(T1).set_from(*loc),
                 };
-                lhs
-                + &rhs
-                + &DynamicLocation::static_binop(StaticLocation::not_equals, *dest, T0.into(), T1.into())
+                lhs + &rhs
+                    + &DynamicLocation::static_binop(
+                        StaticLocation::not_equals,
+                        *dest,
+                        T0.into(),
+                        T1.into(),
+                    )
             }
         }
     }
@@ -620,8 +518,10 @@ impl BasicBlockOp {
 
 lazy_static! {
     pub static ref BASIC_BLOCK: RwLock<usize> = RwLock::new(0);
-    pub static ref BASIC_BLOCK_NAMES: RwLock<HashMap<Symbol, BasicBlock>> = RwLock::new(HashMap::new());
-    pub static ref BASIC_BLOCK_IDS: RwLock<HashMap<usize, BasicBlock>> = RwLock::new(HashMap::new());
+    pub static ref BASIC_BLOCK_NAMES: RwLock<HashMap<Symbol, BasicBlock>> =
+        RwLock::new(HashMap::new());
+    pub static ref BASIC_BLOCK_IDS: RwLock<HashMap<usize, BasicBlock>> =
+        RwLock::new(HashMap::new());
 }
 
 fn next_basic_block_number() -> usize {
@@ -662,21 +562,21 @@ impl Program {
     pub fn assemble(&self) -> String {
         // Add a while loop while the basic block is not 0
         CURRENT_BASIC_BLOCK.set_const(1)
-        + &NEXT_BASIC_BLOCK.set_const(1)
-        + &while_on(&NEXT_BASIC_BLOCK,
-            NEXT_BASIC_BLOCK.inc()
+            + &NEXT_BASIC_BLOCK.set_const(1)
+            + &while_on(
+                &NEXT_BASIC_BLOCK,
+                NEXT_BASIC_BLOCK.inc()
             // // Debugging
             // + &TRASH.putmsg("Current basic block is: ")
             // + &CURRENT_BASIC_BLOCK.putint()
             // + &TRASH.putmsg("\n")
 
             + &self.assemble_ops()
-            + &CURRENT_BASIC_BLOCK.set_from(NEXT_BASIC_BLOCK)
-            // // Debugging
-            // + &TRASH.putmsg("Next basic block is: ")
-            // + &NEXT_BASIC_BLOCK.putint()
-            // + &TRASH.putmsg("\n")
-        )
+            + &CURRENT_BASIC_BLOCK.set_from(NEXT_BASIC_BLOCK), // // Debugging
+                                                                               // + &TRASH.putmsg("Next basic block is: ")
+                                                                               // + &NEXT_BASIC_BLOCK.putint()
+                                                                               // + &TRASH.putmsg("\n")
+            )
     }
 }
 
@@ -694,19 +594,19 @@ pub enum Op {
 impl Op {
     pub fn goto_next_basic_block(&self) -> String {
         match self {
-            Op::BasicBlock(bb)
-            | Op::Label(_, bb) => {
+            Op::BasicBlock(_bb) | Op::Label(_, _bb) => {
                 // Write it to the current basic block register
                 // let followed_immediately_by = bb.next_basic_block();
                 // NEXT_BASIC_BLOCK.set_const(followed_immediately_by as u64)
                 "".to_string()
             }
-            Op::Quit(_) => {
-                NEXT_BASIC_BLOCK.set_const(0)
-            }
+            Op::Quit(_) => NEXT_BASIC_BLOCK.set_const(0),
             Op::Jmp(_current, label) => {
                 let bb_names = BASIC_BLOCK_NAMES.read().unwrap();
-                let next = bb_names.get(label).map(|bb| bb.number).expect(&format!("Unknown basic block {label}"));
+                let next = bb_names
+                    .get(label)
+                    .map(|bb| bb.number)
+                    .expect(&format!("Unknown basic block {label}"));
                 NEXT_BASIC_BLOCK.set_const(next as u64)
             }
 
@@ -714,18 +614,20 @@ impl Op {
                 // This will push the next basic block onto the stack,
                 // and set the "next" basic block to the label
                 // todo!()
-                
-                let bb_names = BASIC_BLOCK_NAMES.read().unwrap();
-                let next = bb_names.get(label).map(|bb| bb.number).expect(&format!("Unknown basic block {label}"));
 
-                push_to_call_stack(NEXT_BASIC_BLOCK)
-                + &NEXT_BASIC_BLOCK.set_const(next as u64)
+                let bb_names = BASIC_BLOCK_NAMES.read().unwrap();
+                let next = bb_names
+                    .get(label)
+                    .map(|bb| bb.number)
+                    .expect(&format!("Unknown basic block {label}"));
+
+                push_to_call_stack(NEXT_BASIC_BLOCK) + &NEXT_BASIC_BLOCK.set_const(next as u64)
                 // // Debugging
                 // + &TRASH.putmsg(&format!("Calling basic block {label}\n"))
                 // + &debug_helper(&[CALL_SP])
             }
 
-            Op::Return(current) => {
+            Op::Return(_current) => {
                 // This will pop the next basic block from the stack,
                 // and set the "next" basic block to the label
                 pop_from_call_stack(NEXT_BASIC_BLOCK)
@@ -733,73 +635,56 @@ impl Op {
                 // + &TRASH.putmsg(&format!("Retuning from {current}\n"))
                 // + &debug_helper(&[CALL_SP])
             }
-            Op::JmpIf(current, location, label) => {
-                let followed_immediately_by = current + 1;
+            Op::JmpIf(_current, location, label) => {
                 let bb_names = BASIC_BLOCK_NAMES.read().unwrap();
-                let next = bb_names.get(label).map(|bb| bb.number).expect(&format!("Unknown basic block {label}"));
+                let next = bb_names
+                    .get(label)
+                    .map(|bb| bb.number)
+                    .expect(&format!("Unknown basic block {label}"));
 
-                // let bb_names = BASIC_BLOCK_NAMES.read().unwrap();
-                // bb_names.get(name).map(|bb| bb.number)
                 DynamicLocation::from(JMP_TEMP).set_from(*location)
-                + &if_stmt(&JMP_TEMP,
-                    NEXT_BASIC_BLOCK.set_const(next as u64)
-                )
-                + &JMP_TEMP.dec()
-                + &if_stmt(&JMP_TEMP,
-                    NEXT_BASIC_BLOCK.set_const(followed_immediately_by as u64)
-                )
+                    + &if_stmt(&JMP_TEMP, NEXT_BASIC_BLOCK.set_const(next as u64))
             }
         }
     }
 
     pub fn assemble(&self) -> String {
         let number = match self {
-            Op::BasicBlock(bb)
-            | Op::Label(_, bb) => {
-                bb.number
-            }
+            Op::BasicBlock(bb) | Op::Label(_, bb) => bb.number,
             Op::Quit(number)
             | Op::Jmp(number, _)
             | Op::Call(number, _)
             | Op::Return(number)
-            | Op::JmpIf(number, _, _) => {
-                *number
-            }
+            | Op::JmpIf(number, _, _) => *number,
         };
-        
+
         CURRENT_BASIC_BLOCK_EQ1.set_const(number as u64)
-        + &StaticLocation::equals(CURRENT_BASIC_BLOCK_EQ0, CURRENT_BASIC_BLOCK, CURRENT_BASIC_BLOCK_EQ1)
-        + &if_stmt(&CURRENT_BASIC_BLOCK_EQ0, 
-            // TRASH.putmsg(&format!("Executing basic block: {self:?}\n\n"))
-            // + &
-            match self {
-                Op::BasicBlock(bb) => {
-                    bb.assemble()
-                }
-                Op::Label(_, bb) => {
-                    bb.assemble()
-                }
-                Op::Quit(..)
-                | Op::Call(..)
-                | Op::Return(..)
-                | Op::Jmp(..)
-                | Op::JmpIf(..) => {
-                    // TRASH.putmsg("Executing jump\n") + &
-                    self.goto_next_basic_block()
-                }
-            }
-            // + &TRASH.putmsg(&format!("Done executing block {self:?}\n"))
-            // + &debug_helper(&[CURRENT_BASIC_BLOCK, NEXT_BASIC_BLOCK, CURRENT_BASIC_BLOCK_EQ0])
-        )
+            + &StaticLocation::equals(
+                CURRENT_BASIC_BLOCK_EQ0,
+                CURRENT_BASIC_BLOCK,
+                CURRENT_BASIC_BLOCK_EQ1,
+            )
+            + &if_stmt(
+                &CURRENT_BASIC_BLOCK_EQ0,
+                // TRASH.putmsg(&format!("Executing basic block: {self:?}\n\n"))
+                // + &
+                match self {
+                    Op::BasicBlock(bb) => bb.assemble(),
+                    Op::Label(_, bb) => bb.assemble(),
+                    Op::Quit(..) | Op::Call(..) | Op::Return(..) | Op::Jmp(..) | Op::JmpIf(..) => {
+                        // TRASH.putmsg("Executing jump\n") + &
+                        self.goto_next_basic_block()
+                    }
+                }, // + &TRASH.putmsg(&format!("Done executing block {self:?}\n"))
+                   // + &debug_helper(&[CURRENT_BASIC_BLOCK, NEXT_BASIC_BLOCK, CURRENT_BASIC_BLOCK_EQ0])
+            )
         // + &CURRENT_BASIC_BLOCK_EQ0.dec()
-        // + &if_stmt(&CURRENT_BASIC_BLOCK_EQ0, 
+        // + &if_stmt(&CURRENT_BASIC_BLOCK_EQ0,
         //     TRASH.putmsg(&format!("Not executing basic block: {self:?}\n\n")))
         // + &TRASH.putmsg(&format!("Done executing block {self:?}\n"))
         // + &debug_helper(&[CURRENT_BASIC_BLOCK, NEXT_BASIC_BLOCK, CURRENT_BASIC_BLOCK_EQ0])
-
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct BasicBlock {
@@ -833,12 +718,10 @@ impl BasicBlock {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use tracing::info;
-
 
     #[test]
     fn test_cat_program() {
@@ -860,14 +743,14 @@ mod tests {
             putchar '\n'
             quit
         "#;
-        // println!("{:#?}", parse(source));
         let program = match parse(source) {
             Ok(program) => program,
             Err(e) => panic!("Error: {}", e),
         };
-
-        assert_eq!(compile_and_run_with_input(program.assemble(), "Hello!\n", 1).unwrap(), "Hello!\nBye!\n");
-
+        assert_eq!(
+            compile_and_run_with_input(program.assemble(), "Hello!\n", 1).unwrap(),
+            "Hello!\nBye!\n"
+        );
     }
 
     #[test]
@@ -916,7 +799,10 @@ mod tests {
             Err(e) => panic!("Error: {}", e),
         };
 
-        assert_eq!(compile_and_run_with_input(program.assemble(), "", 1).unwrap(), "15\n");
+        assert_eq!(
+            compile_and_run_with_input(program.assemble(), "", 1).unwrap(),
+            "15\n"
+        );
     }
 
     #[test]
@@ -932,15 +818,17 @@ mod tests {
             putint [SP]
             putchar '\n'
         "#;
-        // println!("{:#?}", parse(source));
+
         let program = match parse(source) {
             Ok(program) => program,
             Err(e) => panic!("Error: {}", e),
         };
 
-        assert_eq!(compile_and_run_with_input(program.assemble(), "", 1).unwrap(), "5\n4\n");
+        assert_eq!(
+            compile_and_run_with_input(program.assemble(), "", 1).unwrap(),
+            "5\n4\n"
+        );
     }
-
 
     #[test]
     fn test_call_ret_program() {

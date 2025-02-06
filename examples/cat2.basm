@@ -1,0 +1,15 @@
+
+;; `cat` program
+;;
+;; This program reads a character from the input and prints it.
+main:
+    log "Enter characters (Ctrl+D to end):\n"
+    loop:
+        getchar R0
+        R1 eq R0, 0    ;; R1 = (R0 == 0)
+        jmp_if R1, end ;; Jump to the end label if the input is zero
+        putchar R0     ;; Print the entered character if not zero
+        jmp loop
+    end:
+        log "Goodbye!\n"
+        quit

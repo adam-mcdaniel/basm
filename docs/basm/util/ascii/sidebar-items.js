@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply_ascii_art_template","apply_template_from_name_or_file","ascii_art_fill","ascii_art_size","check_valid_template","get_template_names","replace_brainfuck_chars","scale_ascii_art"]};

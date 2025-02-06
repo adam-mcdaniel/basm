@@ -1,0 +1,26 @@
+
+;; `fact` program
+main:
+    push 5
+    call fact ;; Call the factorial function with 5
+    log "Factorial of 5 is "
+    putint [SP]
+    log "\n"
+    quit
+
+fact:
+    R0 eq [SP], 1    ;; Check if the argument is 1
+    jmp_if R0, end   ;; Jump to end if the input is 1
+    
+    ;; Recursive case
+    push [SP]   ;; Push the argument we were given for the recursive call
+    dec [SP]    ;; Decrement the argument for the recursive call
+    call fact   ;; Call fact with the decremented argument
+    pop R0      ;; Get the recursive result from the stack
+    
+    ;; Multiply the recursive result with the original argument (at [SP])
+    [SP] mul R0
+    ret ;; Return to the caller
+end:
+    [SP] = 1 ;; Base case
+    ret ;; Return to the caller

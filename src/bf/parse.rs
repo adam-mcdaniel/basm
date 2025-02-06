@@ -1,7 +1,13 @@
 use super::*;
 
 use nom::{
-    branch::alt, bytes::complete::{tag, take_while1, take_while_m_n}, character::complete::{anychar, char, digit1, hex_digit1, multispace0, none_of, space0}, combinator::{all_consuming, cut, map, map_res, opt, recognize}, error::{convert_error, ParseError, VerboseError}, multi::{many0, many1, separated_list0}, sequence::{delimited, pair, preceded, terminated, tuple}, IResult
+    branch::alt,
+    bytes::complete::tag,
+    character::complete::{char, none_of},
+    combinator::{all_consuming, map},
+    error::{convert_error, VerboseError},
+    multi::many0,
+    IResult,
 };
 // ---------------------------------------------------------------------
 // Error and Location
@@ -56,22 +62,22 @@ fn parse_ops(input: &str) -> Res<Vec<Op>> {
     Ok((input, optimized_ops))
 }
 
-
 pub fn parse(input: &str) -> Result<Vec<Op>, String> {
     match parse_ops(input) {
         Ok((rest, program)) => {
             if rest.is_empty() {
                 Ok(program)
             } else {
-                Err(format!("Failed to parse the entire input. Remaining: {}", rest))
+                Err(format!(
+                    "Failed to parse the entire input. Remaining: {}",
+                    rest
+                ))
             }
         }
-        Err(e) => {
-            match e {
-                nom::Err::Error(e) => Err(format!("Error: {}", convert_error(input, e))),
-                nom::Err::Failure(e) => Err(format!("Failure: {}", convert_error(input, e))),
-                nom::Err::Incomplete(_) => Err("Incomplete input".into()),
-            }
+        Err(e) => match e {
+            nom::Err::Error(e) => Err(format!("Error: {}", convert_error(input, e))),
+            nom::Err::Failure(e) => Err(format!("Failure: {}", convert_error(input, e))),
+            nom::Err::Incomplete(_) => Err("Incomplete input".into()),
         },
     }
 }

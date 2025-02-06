@@ -12,11 +12,13 @@ pub fn scale_ascii_art(art: &str, scale_factor: usize) -> String {
     let mut scaled_art = Vec::new();
 
     for line in &lines {
-        let scaled_line: String = line.chars()
+        let scaled_line: String = line
+            .chars()
             .flat_map(|c| std::iter::repeat(c).take(scale_factor)) // Scale horizontally
             .collect();
-        
-        for _ in 0..scale_factor { // Scale vertically
+
+        for _ in 0..scale_factor {
+            // Scale vertically
             scaled_art.push(scaled_line.clone());
         }
     }
@@ -26,7 +28,11 @@ pub fn scale_ascii_art(art: &str, scale_factor: usize) -> String {
 
 pub fn ascii_art_size(art: &str) -> (usize, usize) {
     let lines: Vec<&str> = art.lines().collect();
-    let width = lines.iter().map(|line| line.chars().count()).max().unwrap_or(0);
+    let width = lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0);
     let height = lines.len();
     (width, height)
 }
@@ -36,7 +42,7 @@ pub fn ascii_art_fill(art: &str, width: usize, height: usize) -> String {
     let lines: Vec<&str> = art.lines().collect();
     let mut filled_art = Vec::new();
 
-    for (i, line) in lines.iter().enumerate() {
+    for line in lines.iter() {
         let mut filled_line = line.to_string();
         if filled_line.len() < width {
             filled_line.push_str(&" ".repeat(width - filled_line.len()));
@@ -84,23 +90,32 @@ pub fn apply_ascii_art_template(art_template: &str, bf: String, comment: &str) -
     // Now, pad the bf with comments
     let desired_size = available_brainfuck_slots(&art_template);
     bf = super::bf::pad_brainfuck_with_comments(bf, comment, desired_size);
-    debug!("Available slots: {}, bf len: {}", available_brainfuck_slots(&art_template), bf.len());
+    debug!(
+        "Available slots: {}, bf len: {}",
+        available_brainfuck_slots(&art_template),
+        bf.len()
+    );
 
     // Go through every non-whitespace character in the template and replace it with a character from the brainfuck code
     let mut bf_iter = bf.chars();
-    art_template = art_template.chars().map(|c| {
-        if c.is_whitespace() {
-            c
-        } else {
-            bf_iter.next().unwrap_or(PLACEHOLDER)
-        }
-    }).collect();
+    art_template = art_template
+        .chars()
+        .map(|c| {
+            if c.is_whitespace() {
+                c
+            } else {
+                bf_iter.next().unwrap_or(PLACEHOLDER)
+            }
+        })
+        .collect();
 
-    assert!(bf_iter.next().is_none(), "Not enough space in art template for brainfuck code");
+    assert!(
+        bf_iter.next().is_none(),
+        "Not enough space in art template for brainfuck code"
+    );
 
     art_template
 }
-
 
 lazy_static! {
     static ref ASCII_ART_TEMPLATES: HashMap<&'static str, &'static str> = {
@@ -143,13 +158,17 @@ pub fn check_valid_template(name: &str) -> bool {
     true
 }
 
-pub fn apply_template_from_name_or_file(name: &str, bf: String, comment: Option<&str>) -> std::io::Result<String> {
+pub fn apply_template_from_name_or_file(
+    name: &str,
+    bf: String,
+    comment: Option<&str>,
+) -> std::io::Result<String> {
     let comment = comment.unwrap_or("");
     let template = match ASCII_ART_TEMPLATES.get(name) {
         Some(template) => {
             info!("Using template: {}", name);
             template.to_string()
-        },
+        }
         None => {
             // Open it from the file system
             let path = Path::new(name);

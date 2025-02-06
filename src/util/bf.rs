@@ -1,8 +1,6 @@
-use crate::simplify_bf;
-
 pub fn pad_brainfuck_with_comments(code: String, comment: &str, desired_size: usize) -> String {
     let original_size = code.len();
-    
+
     if original_size >= desired_size {
         return code; // No padding needed
     }
