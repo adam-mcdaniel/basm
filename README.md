@@ -211,7 +211,7 @@ These instructions simply work by assigning registers to fixed tape locations, a
 
 As an example, the `add` instruction is implemented like this:
 
-> [!NOTE]
+> [!TIP]
 > `SRC` and `DEST` are the locations of the two values being added, respectively.
 > This algorithm performs the operation `DEST = DEST + SRC`.
 > `temp0` is a temporary register, reserved by the assembler.
@@ -290,7 +290,7 @@ in the stack.
 
 Here's the BrainF*** algorithm for setting the value at a pointer's index.
 
-> [!NOTE]
+> [!TIP]
 > `IDX` and `VAL` are the locations of the pointer and the value being written to, respectively.
 > `STACK` is the location where the stack begins.
 > `temp0`, `temp1`, and `temp2` are temporary registers, reserved by the assembler.
@@ -311,7 +311,7 @@ STACK>>[[>>]+[<<]>>-]+
 
 Here's the BrainF*** algorithm for retreiving the value at a pointer's index.
 
-> [!NOTE]
+> [!TIP]
 > The mnemonics are the same as above.
 
 ```brainfuck
