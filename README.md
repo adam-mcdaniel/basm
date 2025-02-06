@@ -98,7 +98,7 @@ For more examples, check out the [`examples/` directory](./examples/), which con
 
 `basm` provides a stack with behavior similar to other assemblers. You may `push` or `pop` values on the stack, or access stack elements directly with pointers.
 
-```x86asm
+```asm
 ;; Push some elements on the stack
 push '?'
 push '!'
@@ -115,7 +115,7 @@ putchar R2 ;; Prints '?'
 
 The stack, and pointers to stack elements, are implemented using a BrainF*** table that can be accessed via the registers. Stack elements can be directly read or assigned to by using the `[]` operator.
 
-```x86asm
+```asm
 ;; Push some elements on the stack
 push 1
 push 2
@@ -134,7 +134,7 @@ putint [R0]     ;; Prints 1
 
 `basm` supports labels, unconditional jumps, conditional jumps, and function calls. You can use labels to mark specific points in your code and jump to them as needed.
 
-```x86asm
+```asm
 ;; `yes` program
 ;;
 ;; This program prints "y" forever.
@@ -148,7 +148,7 @@ start: ;; Define a label
 
 Conditional jumps are performed using the `jmp_if` instruction, which takes a location storing a boolean value (like a register or stack element) and a label to jump to if the value is not zero.
 
-```x86asm
+```asm
 ;; `cat` program
 ;;
 ;; This program reads a character from the input and prints it.
@@ -169,7 +169,7 @@ Jump instructions do not save any information about where they came from. If you
 
 Below is a simple example of a recursive factorial function, which calls itself until it reaches the base case. The `call` instruction saves the current basic block on the call stack (hidden from the user) and jumps to the function. The `ret` instruction pops the last basic block from the call stack and jumps to it.
 
-```x86asm
+```asm
 ;; `fact` program
 main:
     push 5
