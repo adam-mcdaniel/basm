@@ -45,8 +45,8 @@
     - [API](#api)
 - [Contributing](#contributing)
 - [License](#license)
-- [About the Author](#about-the-author)
 - [Related Works](#related-works)
+- [About the Author](#about-the-author)
 
 ## Introduction
 
@@ -413,6 +413,15 @@ To start contributing, check out the [contributing guide](./CONTRIBUTING.md)!
 
 This project is licensed under the [MIT License](./LICENSE).
 Feel free to use, modify, and distribute this code as you wish!
+
+## Related Works
+
+| Project | Description |
+|-|-|
+| [Harbor](https://github.com/adam-mcdaniel/harbor) | Harbor is a previous compiler I made that targets an *extended* BrainF*** variant. The variant does a lot of heavy lifting to make it easier to compile to, so I consider `basm` to be a more impressive feat. |
+| [`asm2bf`](https://esolangs.org/wiki/Asm2bf#Explained_code_example) | Another BrainF*** assembler like `basm`. It's been developed for longer, but it appears the project is no longer maintained. It supports a lot of the same features `basm` does! |
+| [`awib`](https://github.com/matslina/awib) | A compiler for BrainF***, written in BrainF***! It can target several backends, including x86 for Linux, C, Ruby, Go, Tcl, Java, and Rust. |
+| [Rosetta Code BrainF*** Implementations](https://rosettacode.org/wiki/Execute_Brain****) | A list of BrainF*** interpreters and compilers in various languages. |
 
 ## About the Author
 
