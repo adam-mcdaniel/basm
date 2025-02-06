@@ -391,6 +391,7 @@ fn main() {
         R1 = 10
 
         R2 add R0, R1
+        putint R0
         log \" + \"
         putint R1
         log \" = \"
